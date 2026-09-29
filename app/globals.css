@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* Pushpak palette — the zevto/CLATians blue as the primary UI colour, the logo's warm orange for highlights
+ * (badges, CTAs, stats). The pink → orange gradient survives only in the logo. */
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #dbe5ff;
+  --color-brand-500: #2f6bff;
+  --color-brand-600: #0b5cff;
+  --color-brand-700: #0847c7;
+  --color-brand-800: #06359a;
+  --color-brand-900: #04246b;
+
+  --color-gold-50: #fff4ea;
+  --color-gold-100: #ffe2c7;
+  --color-gold-500: #ff8a1f;
+  --color-gold-600: #e8650c;
+  --color-gold-700: #b24c05;
+}
+
+/* Design tokens — every screen reads these instead of hard-coding hexes. */
+:root {
+  --app-bg: #eef1fb;      /* page canvas */
+  --bg-primary: #eef1fb;
+  --surface: #ffffff;     /* cards */
+  --ink: #0f1729;         /* headings */
+  --ink-primary: #0f1729;
+  --ink-soft: #5b6478;    /* body / secondary */
+  --ink-mute: #98a1b5;    /* captions */
+  --line: #e6eaf5;        /* hairlines */
+  --blue: #0b5cff;
+  --blue-dark: #0847c7;
+  --blue-tint: #e8effe;
+  --blue-ghost: #dbeafe;
+  --gold: #ff8a1f;
+  --gold-dark: #e8650c;
+  --gold-tint: #fff4ea;
+  --gold-100: #ffe2c7;
+  --brand-grad: linear-gradient(90deg, #e8358f 0%, #ff5a4e 50%, #ff9f1c 100%);
+  --border: #e5e7eb;
+  --surface-dim: #f3f4f6;
+  --surface-input: #f9fafb;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+  --text-disabled: #9ca3af;
+  --success: #dcfce7;
+  --success-text: #15803d;
+  --success-border: #bbf7d0;
+  --warning: #fef3c7;
+  --warning-text: #d97706;
+  --warning-border: #fde68a;
+  --error: #fee2e2;
+  --error-text: #dc2626;
+  --info-bg: #eff6ff;
+  --info-border: #dbeafe;
+  --info-text: #1e40af;
+  --teal-bg: #e6fffa;
+  --teal-text: #0d9488;
+  --teal-border: #ccfbf1;
+  --orange-bg: #fff3e0;
+  --orange-text: #d97706;
+  --orange-border: #fde68a;
+  --green: #2f9e76;
+  --green-dark: #3e8e7e;
+  --line-strong: #dfe4ef;
+  --red: #e03131;
+  --disabled: #c9b999;
+  --purple-tint: #f5f3ff;   /* light purple tint */
+  --purple: #7c3aed;
+  --purple-400: #c084fc;
+  --purple-600: #9333ea;
+  --teal: #2fb6c4;
+  --teal-light: #5ccfdb;
+  --green-500: #22c55e;
+  --blue-soft: #93bdfb;
+  --blue-pale: #dce9fd;
+  --orange: #e07b1f;
+  --orange-light: #f0a44a;
+  --cyan: #22b8cf;
+  --cyan-dark: #0e7490;
+  --brand-50: #eef2ff;
+  --brand-100: #dbe5ff;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg-secondary: #f0f2f8;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 20px;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 41, 0.06);
+  --shadow-md: 0 2px 10px rgba(15, 23, 41, 0.06);
+  --shadow-lg: 0 4px 16px rgba(15, 23, 41, 0.08);
+  --shadow-xl: 0 8px 24px rgba(15, 23, 41, 0.1);
+  --transition-fast: 150ms ease;
+  --transition-med: 250ms ease;
+  --font-size-xs: 10.5px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 16px;
+  --font-size-2xl: 18px;
+  --font-size-3xl: 22px;
+  --font-size-4xl: 24px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 800;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+  --max-width-app: 430px;
+  --nav-height: 64px;
+  --text-primary: #0f1729;
+  --shadow-card: 0 2px 10px rgba(15, 23, 41, 0.05);
+  --shadow-float: 0 0 40px rgba(15, 23, 41, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg);
+  font-family: var(--font-poppins), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  /* Prices, ranks & stats line up cleanly in columns. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* iOS Safari inflates text on rotation without this. */
+  -webkit-text-size-adjust: 100%;
+}
+
+button, input, textarea, select { font-family: inherit; }
+
+/* Poppins runs wide; pull headings in slightly so they read as one block. */
+h1, h2, h3, h4 { letter-spacing: -0.02em; }
+
+/* iOS zooms the whole page into any focused input under 16px — a very
+ * un-app-like jolt. Force 16px on touch-size screens (beats inline styles). */
+@media (max-width: 640px) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+/* Subtle press feedback for tappable cards/buttons (native-app feel). */
+.press { transition: transform 0.12s ease, opacity 0.12s ease; }
+.press:active { transform: scale(0.97); opacity: 0.9; }
+
+.no-scroll::-webkit-scrollbar { display: none; }
+.no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Home "recommended by" avatars — each new face flips into its slot. */
+@keyframes avatar-flip {
+  from { opacity: 0; transform: rotateY(90deg) scale(0.7); }
+  to   { opacity: 1; transform: none; }
+}
+.avatar-flip { animation: avatar-flip 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2) both; }
+@media (prefers-reduced-motion: reduce) { .avatar-flip { animation: none; } }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.5s infinite; }
+
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.fade-up { animation: fade-up 0.35s ease both; }
+@media (prefers-reduced-motion: reduce) { .fade-up { animation: none; } }
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
+}
+.sheet-up { animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) { .sheet-up { animation: none; } }
+
+/* ── Admin panel (/admin): sidebar on desktop, top bar + drawer on phones. ── */
+.admin-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.admin-side { position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.admin-topbar { display: none; }
+.admin-main { min-width: 0; padding: 24px 28px 40px; }
+.admin-grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.admin-grid-2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.admin-row:hover td { background: var(--bg-secondary); }
+@media (max-width: 1100px) {
+  .admin-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .admin-shell { grid-template-columns: 1fr; }
+  .admin-side { display: none; }
+  .admin-side.open { display: block; position: fixed; inset: 0 auto 0 0; width: 260px; z-index: 150; box-shadow: var(--shadow-xl); }
+  .admin-topbar { display: flex; }
+  .admin-main { padding: 16px 16px 32px; }
+}
+@media (max-width: 480px) {
+  .admin-grid-4 { gap: 10px; }
+}
+
+/* ── Screen protection (PRD §14). The Android build sets FLAG_SECURE on these screens; on the web we can only
+ * stop text selection and hide the content when the app loses focus (recent-apps preview, screen share). ── */
+.secure { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.secure-veil {
+  position: absolute; inset: 0; z-index: 400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(238,241,251,0.82); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  color: var(--ink-soft); font-size: 13px; font-weight: 600; text-align: center; padding: 24px;
+}
+
+/* Live-tracking map: technician marker glides along the route. */
+@keyframes ping { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(2.2); opacity: 0; } }
+.ping { animation: ping 1.6s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+@media (prefers-reduced-motion: reduce) { .ping { animation: none; } }
+
+.admin-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .admin-grid-3 { grid-template-columns: minmax(0, 1fr); } }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .form-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Printable invoice / quotation: only the document prints. */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-doc, .print-doc * { visibility: visible !important; }
+  .print-doc { position: fixed !important; inset: 0 !important; box-shadow: none !important; border: none !important; overflow: visible !important; }
+  .no-print { display: none !important; }
+}
