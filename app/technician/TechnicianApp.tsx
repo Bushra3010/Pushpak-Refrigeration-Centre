@@ -44,7 +44,7 @@ export default function TechnicianApp() {
   const inbox = db.notifications.filter((n) => n.to === `tech:${tech.id}`);
   const unread = inbox.filter((n) => !n.read).length;
   // Technicians only see jobs assigned to them (PRD §15).
-  const job = openJob ? db.jobs.find((j) => j.id === openJob && j.techId === tech.id) : undefined;
+  const job = openJob ? db.jobs.find((j) => j.id === openJob && (j.techId === tech.id || (j.helpers ?? []).includes(tech.id))) : undefined;
   const showNav = !job;
   const logout = () => { writeSession(null); setTechId(null); setTab("jobs"); setOpenJob(null); };
 
@@ -61,7 +61,7 @@ export default function TechnicianApp() {
             )}
             {tab === "search" && <SearchScreen db={db} tech={tech} onOpenJob={setOpenJob} />}
             {tab === "stock" && <StockScreen db={db} tech={tech} onRequest={(items) => { requestStock(tech.id, items); flash("Stock request sent to office"); }} />}
-            {tab === "profile" && <ProfileScreen db={db} tech={tech} onLogout={logout} />}
+            {tab === "profile" && <ProfileScreen db={db} tech={tech} onLogout={logout} flash={flash} />}
           </>
         )}
       </div>
@@ -77,7 +77,7 @@ export default function TechnicianApp() {
 
       {bell && (
         <NotificationSheet items={inbox} onClose={() => { setBell(false); markRead(`tech:${tech.id}`); }}
-          onOpen={(n) => { markRead(`tech:${tech.id}`, n.id); setBell(false); if (n.jobId && db.jobs.some((j) => j.id === n.jobId && j.techId === tech.id)) setOpenJob(n.jobId); }} />
+          onOpen={(n) => { markRead(`tech:${tech.id}`, n.id); setBell(false); if (n.jobId && db.jobs.some((j) => j.id === n.jobId && (j.techId === tech.id || (j.helpers ?? []).includes(tech.id)))) setOpenJob(n.jobId); }} />
       )}
       <Toast msg={toast} raised={showNav} />
     </PhoneShell>

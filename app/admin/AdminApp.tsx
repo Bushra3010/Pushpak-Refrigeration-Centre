@@ -14,8 +14,13 @@ import { AcAssetsSection, CustomersSection, TechniciansSection } from "./People"
 import { ReportsSection } from "./Reports";
 import { AuditSection, NotificationsSection, ROLES, SettingsSection, type Role } from "./System";
 import { Btn, fieldLabel, input } from "./kit";
+import { CalculatorsSection, CostRulesSection } from "./Calculators";
+import { ExpensesSection, TimeSheetsSection } from "./Expenses";
+import { PayrollSection } from "./Payroll";
+import { ProfitSection, TechProfitSection } from "./Profit";
 
-export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings";
+export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
+  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -30,6 +35,14 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "billing", label: "Invoices & Payments", icon: "💳", roles: ["Admin", "Accounts", "Service Coordinator"] },
     { id: "inventory", label: "Parts & Inventory", icon: "📦", roles: ["Admin", "Service Coordinator", "Accounts"] },
   ] },
+  { group: "Profitability", items: [
+    { id: "profit", label: "Profit Dashboard", icon: "💹", roles: ["Admin", "Accounts"] },
+    { id: "techprofit", label: "Technician Profit", icon: "🏅", roles: ["Admin", "Accounts"] },
+    { id: "payroll", label: "Payroll & Salary", icon: "🧾", roles: ["Admin", "Accounts"] },
+    { id: "expenses", label: "Expenses & Claims", icon: "💸", roles: ["Admin", "Accounts", "Service Coordinator"] },
+    { id: "timesheets", label: "Time Sheets", icon: "⏱️", roles: ["Admin", "Service Coordinator"] },
+    { id: "calculators", label: "Pipe & Tonnage Calc", icon: "📐", roles: ["Admin", "Service Coordinator", "Accounts"] },
+  ] },
   { group: "Growth", items: [
     { id: "growth", label: "AMC & Upsell", icon: "📈", roles: ["Admin", "Service Coordinator"] },
     { id: "reports", label: "Reports", icon: "📊", roles: ["Admin", "Accounts"] },
@@ -38,6 +51,7 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "notifications", label: "Notifications", icon: "🔔", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "audit", label: "Audit Log", icon: "🛡️", roles: ["Admin"] },
     { id: "settings", label: "Settings & Pricing", icon: "⚙️", roles: ["Admin"] },
+    { id: "costrules", label: "Cost & Calc Rules", icon: "🧮", roles: ["Admin"] },
   ] },
 ];
 
@@ -45,6 +59,8 @@ const TITLES: Record<Section, string> = {
   dashboard: "Dashboard", jobs: "Jobs & Dispatch", customers: "Customers", acs: "AC Assets", technicians: "Technicians",
   inventory: "Parts & Inventory", quotations: "Quotations", billing: "Invoices & Payments", growth: "AMC, Upsell & Reminders",
   reports: "Reports", notifications: "Notifications", audit: "Audit Log", settings: "Settings & Pricing",
+  profit: "Profit Dashboard", techprofit: "Technician Profitability", payroll: "Payroll & Salary", expenses: "Expenses & Claims",
+  timesheets: "Time Sheets", calculators: "Copper Pipe & Tonnage Calculators", costrules: "Cost & Calculation Rules",
 };
 
 const SESSION_KEY = "prc:admin";
@@ -77,7 +93,7 @@ export default function AdminApp() {
   const notify = (msg: string) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2400);
+    toastTimer.current = setTimeout(() => setToast(null), msg.startsWith("⚠") ? 5000 : 2400);
   };
   const go = (s: Section) => { setSection(s); setMenuOpen(false); };
   const openJob = (id: string) => { setSection("jobs"); setOpenJobId(id); setMenuOpen(false); };
@@ -95,6 +111,8 @@ export default function AdminApp() {
     inventory: db.parts.filter((p) => p.stock <= p.minStock).length,
     notifications: db.notifications.filter((n) => n.to === "admin" && !n.read).length,
     customers: db.customers.filter((c) => !c.mergedInto && db.customers.some((o) => o.id !== c.id && !o.mergedInto && o.name.toLowerCase() === c.name.toLowerCase())).length,
+    timesheets: db.timeLogs.filter((l) => l.status === "Submitted").length + db.corrections.filter((c) => c.status === "Pending").length,
+    expenses: db.expenses.filter((e) => e.status === "Pending").length,
   };
 
   const sidebar = (
@@ -179,6 +197,13 @@ export default function AdminApp() {
             {current === "notifications" && <NotificationsSection db={db} openJob={openJob} />}
             {current === "audit" && <AuditSection db={db} />}
             {current === "settings" && <SettingsSection key={JSON.stringify(db.settings)} db={db} who={who} notify={notify} />}
+            {current === "profit" && <ProfitSection db={db} openJob={openJob} />}
+            {current === "techprofit" && <TechProfitSection db={db} />}
+            {current === "payroll" && <PayrollSection db={db} who={who} notify={notify} />}
+            {current === "expenses" && <ExpensesSection db={db} who={who} notify={notify} />}
+            {current === "timesheets" && <TimeSheetsSection db={db} who={who} notify={notify} />}
+            {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
+            {current === "costrules" && <CostRulesSection key={JSON.stringify(db.fin)} db={db} who={who} notify={notify} />}
 
             <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 11.5, color: "var(--ink-mute)" }}>Demo data · shared with the customer &amp; technician apps in this browser · Supabase coming next</p>
           </main>
@@ -188,8 +213,8 @@ export default function AdminApp() {
       {toast && (
         <div className="fade-up" role="status" style={{
           position: "fixed", right: 20, bottom: 20, left: "auto", zIndex: 300, maxWidth: "calc(100vw - 40px)",
-          background: "var(--ink)", color: "white", borderRadius: 12, padding: "12px 16px", fontSize: 13.5, fontWeight: 500, boxShadow: "var(--shadow-xl)",
-        }}>✓ {toast}</div>
+          background: toast.startsWith("⚠") ? "var(--error-text)" : "var(--ink)", color: "white", borderRadius: 12, padding: "12px 16px", fontSize: 13.5, fontWeight: 500, boxShadow: "var(--shadow-xl)",
+        }}>{toast.startsWith("⚠") ? toast : `✓ ${toast}`}</div>
       )}
     </div>
   );

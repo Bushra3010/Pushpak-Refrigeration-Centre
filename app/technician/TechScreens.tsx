@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { MyFinance } from "./Timer";
 import { BrandMark, Wordmark } from "../components/Brand";
 import { AlertIcon, BellIcon, ChevronRight, ClockIcon, LogoutIcon, MinusIcon, PinIcon, PlusIcon, SearchIcon, StarIcon } from "../components/icons";
 import { AcHistory, AcSpecs, JobPill, PriorityPill, SecureScreen } from "../components/service";
@@ -73,7 +74,7 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
   db: Db; tech: Technician; unread: number; onOpen: (id: string) => void; onBell: () => void; onToggleDuty: (on: boolean) => void;
 }) {
   const [tab, setTab] = useState<JobTab>("today");
-  const mine = db.jobs.filter((j) => j.techId === tech.id);
+  const mine = db.jobs.filter((j) => j.techId === tech.id || (j.helpers ?? []).includes(tech.id));
   const t0 = today();
   const todays = mine.filter((j) => j.date === t0 && j.status !== "Cancelled");
   const pending = mine.filter((j) => ["Assigned", "Accepted"].includes(j.status));
@@ -297,7 +298,7 @@ function RequestSheet({ db, onClose, onSend }: { db: Db; onClose: () => void; on
 
 /* ───────────────────────── Profile ───────────────────────── */
 
-export function ProfileScreen({ db, tech, onLogout }: { db: Db; tech: Technician; onLogout: () => void }) {
+export function ProfileScreen({ db, tech, onLogout, flash }: { db: Db; tech: Technician; onLogout: () => void; flash: (m: string) => void }) {
   const mine = db.jobs.filter((j) => j.techId === tech.id);
   const done = mine.filter(isDone);
   const assigned = mine.filter((j) => j.status !== "New Request").length;
@@ -321,6 +322,7 @@ export function ProfileScreen({ db, tech, onLogout }: { db: Db; tech: Technician
             <div key={k} style={{ ...card, padding: 12 }}><p style={{ margin: 0, fontSize: 11, color: "var(--ink-mute)", fontWeight: 600 }}>{k}</p><p style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{v}</p></div>
           ))}
         </div>
+        <MyFinance db={db} tech={tech} flash={flash} />
         <h3 style={sectionTitle}>Skills</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{tech.skills.map((s) => <Pill key={s} tone="blue">{s}</Pill>)}</div>
         <div style={{ ...card, padding: 12, marginTop: 16, background: "var(--success)", boxShadow: "none" }}>

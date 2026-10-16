@@ -7,6 +7,11 @@
 
 /* ───────────────────────── Types ───────────────────────── */
 
+import {
+  DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
+  type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
+} from "./finance-types";
+
 export type CustomerType = "Residential" | "Office" | "Shop" | "Commercial" | "Other";
 export type ContactPref = "Call" | "WhatsApp";
 
@@ -135,6 +140,7 @@ export interface QuoteLine {
   refId?: string; // part / service catalogue id
   upsell?: boolean; // added from a recommendation
   addOn?: boolean; // added after the first approval (needs its own approval)
+  unitCost?: number; // parts: cost per unit snapshotted when the part is consumed (job material cost)
 }
 
 export interface Quote {
@@ -186,6 +192,14 @@ export interface Job {
   notes: { at: string; by: string; text: string }[];
   timeline: TimelineEntry[];
   cancelReason?: string;
+  /** Finance add-on: extra technicians on the job (techId is the lead). */
+  helpers?: string[];
+  /** Approved manual revenue split, techId → % (must total 100); otherwise split by approved hours. */
+  split?: Record<string, number>;
+  splitApprovedBy?: string;
+  /** Callback: the earlier job this visit is a repeat of. */
+  parentJobId?: string;
+  estHours?: number;
 }
 
 export interface Technician {
@@ -260,6 +274,19 @@ export interface Db {
   audit: AuditEntry[];
   leads: Record<string, LeadStatus>;
   settings: Settings;
+  // ── finance add-on (app/lib/finance*.ts) ──
+  timeLogs: TimeLog[];
+  corrections: TimeCorrection[];
+  salaries: SalaryRecord[];
+  expenses: Expense[];
+  advances: Advance[];
+  incentives: Incentive[];
+  deductions: Deduction[];
+  attendance: AttendanceMark[];
+  holidays: Holiday[];
+  payrollRuns: PayrollRun[];
+  calcs: SavedCalc[];
+  fin: FinanceSettings;
 }
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -699,6 +726,8 @@ export function seedDb(): Db {
     audit: seedAudit(),
     leads: {},
     settings: { ...SETTINGS },
+    timeLogs: [], corrections: [], salaries: [], expenses: [], advances: [], incentives: [], deductions: [],
+    attendance: [], holidays: [], payrollRuns: [], calcs: [], fin: structuredClone(DEFAULT_FINANCE_SETTINGS),
   };
 }
 

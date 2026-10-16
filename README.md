@@ -19,3 +19,31 @@ Example flow: book in the customer app → assign in Admin → Jobs → accept, 
 - `app/lib/store.ts`: every write action (audit log + notifications)
 - `app/components/service.tsx`: shared timeline, quotation, invoice, AC history, questionnaire and screen protection
 - `app/customer/`, `app/technician/`, `app/admin/`: the three apps
+
+## Profitability add-on
+
+Shows the owner what each job and technician really earns — materials, salary allocation, overtime,
+allowances, room/food, petrol/travel and overhead — reconciled to company profit. Rules:
+[`docs/PROFITABILITY.md`](docs/PROFITABILITY.md).
+
+| Where | What |
+|---|---|
+| Admin → **Profit Dashboard** | Revenue ex GST, payments collected, outstanding, materials, labour, direct expenses, gross & net profit and margins, jobs/completed/pending/callbacks, actual vs estimated hours, utilisation. Filters: month range, technician, customer, job type, status. Every card opens its records; 5 charts; reconciliation check. |
+| Admin → **Technician Profit** | Assigned/completed jobs, productive & travel hours, salary to jobs, idle salary, overtime, incentives, direct & allocated allowances, materials, attributed revenue, gross & fully allocated contribution, callback rate, average hours. |
+| Admin → **Payroll & Salary** | Effective-dated monthly/hourly salary, working days & hours, overtime, fixed allowances, attendance, holidays, incentives, deductions, advances; payslips; draft → approve (locks the month). |
+| Admin → **Expenses & Claims** | Direct job / technician shared / operating classification, approval, reversal, reimbursement once. |
+| Admin → **Time Sheets** | Approve/reject technician time; corrections with reason and a second approver. |
+| Admin → **Pipe & Tonnage Calc** | Copper pipe weight, price & gauge (paired lines, insulation, fittings, labour, markup vs margin, GST separate); AC tonnage estimator; save to a customer or add lines to a job's estimate. |
+| Admin → **Cost & Calc Rules** | Allocation rules, salary visibility, copper density + source, gauge tables with sources/verification, tonnage coefficients. |
+| Admin → job → **Team, time & profit** | Helpers (multi-technician), approved revenue split, time log, job expenses, estimated vs actual profit, log a callback. |
+| Admin → **Reports** | CSV exports: job & technician profitability, payroll & allowances, material consumption, inventory, receivables, monthly operating profit, estimate vs actual. |
+| Technician app | Job timer (travel / work / break / resume / stop — never overlapping), expense claims, my hours & corrections, my payslips (if allowed). |
+
+Older saved demo data is upgraded automatically (Settings → Reset demo restores the full sample).
+In this demo the role picker and data live in the browser; real authentication, database storage and
+server-side permission checks arrive with the Supabase step.
+
+```bash
+npm test   # 76 tests: pipe/tonnage/markup-vs-margin, payroll allocation, revenue split,
+           # reconciliation example, demo data, store flows (timer, locks, duplicate prevention), UI render
+```
