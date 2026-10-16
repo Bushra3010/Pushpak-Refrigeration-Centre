@@ -108,7 +108,8 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
       </div>
 
       <div style={{ padding: "0 16px" }}>
-        <div style={{ borderRadius: 20, padding: 16, color: "white", display: "flex", background: "linear-gradient(150deg,var(--blue-dark),var(--blue))", boxShadow: "0 10px 28px rgba(11,92,255,0.28)" }}>
+        <div className="shift-heading"><div><h1>Let’s get to work.</h1><p>{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · {tech.area}</p></div><Pill tone={onDuty ? "green" : "grey"}>{onDuty ? "On duty" : "Off duty"}</Pill></div>
+        <div className="shift-summary">
           {[[String(todays.length), "Today"], [String(pending.length), "Pending"], [String(progress.length), "In progress"], [String(doneToday.length), "Completed"]].map(([v, l], i) => (
             <div key={l} style={{ flex: 1, textAlign: "center", borderRight: i < 3 ? "1px solid rgba(255,255,255,0.18)" : "none" }}>
               <p style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{v}</p>
@@ -124,7 +125,7 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
         {newJobs.map((j) => {
           const c = db.customers.find((x) => x.id === j.customerId);
           return (
-            <button key={j.id} onClick={() => onOpen(j.id)} className="press fade-up" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "2px solid var(--gold)", textAlign: "left", cursor: "pointer", boxShadow: "0 10px 24px rgba(255,138,31,0.2)" }}>
+            <button key={j.id} onClick={() => onOpen(j.id)} className="press fade-up" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "2px solid var(--gold)", textAlign: "left", cursor: "pointer", boxShadow: "var(--shadow-card)" }}>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--gold-dark)", letterSpacing: "0.05em" }}>🔔 NEW JOB ASSIGNED · TAP TO ACCEPT</span>
               <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{c?.name} · {j.complaint.issues.join(", ")}</p>
               <p style={small}>{relDay(j.date)}, {j.slot} · {c?.area}</p>

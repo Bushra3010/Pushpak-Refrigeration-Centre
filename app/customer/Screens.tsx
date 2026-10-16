@@ -46,13 +46,17 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
       </div>
 
       <div style={{ padding: "0 16px" }}>
-        {/* Hero */}
-        <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: 18, color: "white", background: "linear-gradient(150deg,var(--blue-dark),var(--blue))", boxShadow: "0 10px 28px rgba(11,92,255,0.28)" }}>
-          <div style={{ position: "absolute", right: -18, top: -18, opacity: 0.16 }}><SnowIcon s={130} c="white" w={1.2} /></div>
-          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "var(--gold-100)", letterSpacing: "0.05em" }}>AC SERVICE &amp; REPAIR</p>
-          <p style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800, lineHeight: 1.25, maxWidth: 230 }}>AC not cooling? Book a technician in a minute.</p>
-          <p style={{ margin: 0, fontSize: 12.5, color: "rgba(255,255,255,0.78)" }}>Approve the quote before any work starts.</p>
-          <button onClick={() => onBook()} className="press" style={{ marginTop: 14, border: "none", borderRadius: 12, padding: "10px 16px", background: "var(--gold)", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 6px 14px rgba(255,138,31,0.4)" }}>Book Service</button>
+        <div className="customer-hero">
+          <div className="hero-orbit" aria-hidden="true"><SnowIcon s={92} c="#9ed9d9" w={1} /></div>
+          <p className="eyebrow" style={{ color: "#9ed9d9" }}>YOUR COMFORT, TAKEN CARE OF</p>
+          <h1>Good days start<br />with better cooling.</h1>
+          <p>Expert AC care, clear pricing, and every service detail in one place.</p>
+          <button onClick={() => onBook()} className="hero-cta press">Book Service <span aria-hidden="true">↗</span></button>
+        </div>
+        <div className="service-shortcuts">
+          <button onClick={() => onBook()}><WrenchIcon s={22} c="var(--blue)" />Repair &amp; service</button>
+          <button onClick={onAmc}><ShieldIcon s={22} c="var(--blue)" />Care plans</button>
+          <button onClick={onAllJobs}><HistoryIcon s={22} c="var(--blue)" />Track bookings</button>
         </div>
 
         {onSizing && (

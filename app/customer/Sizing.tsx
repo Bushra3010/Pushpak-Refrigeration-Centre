@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Chips, Footer, PageHeader, PrimaryButton, card, field, label, sectionTitle, small } from "../components/ui";
 import { formatNum } from "../lib/calc/money";
-import { estimateTonnage, type TonnageInput } from "../lib/calc/tonnage";
+import { CITY_CLIMATE, estimateTonnage, type TonnageInput } from "../lib/calc/tonnage";
 import type { Customer, Db } from "../lib/data";
 import { sizingEnquiry } from "../lib/store";
 
@@ -19,7 +19,9 @@ export function SizingPage({ db, me, onBack, onBook, flash }: { db: Db; me: Cust
   const [len, setLen] = useState("12");
   const [wid, setWid] = useState("10");
   const [ceil, setCeil] = useState("10");
-  const [climate, setClimate] = useState("hot_dry");
+  const [city, setCity] = useState("Delhi / NCR");
+  const [otherClimate, setOtherClimate] = useState("hot_dry");
+  const climate = CITY_CLIMATE.find(([n]) => n === city)?.[1] ?? otherClimate;
   const [people, setPeople] = useState(2);
   const [sun, setSun] = useState<TonnageInput["sunlight"]>("normal");
   const [top, setTop] = useState(false);
@@ -34,7 +36,7 @@ export function SizingPage({ db, me, onBack, onBook, flash }: { db: Db; me: Cust
   const res = useMemo(() => { try { return { r: estimateTonnage(input, db.fin.tonnage) }; } catch (e) { return { e: (e as Error).message }; } },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [len, wid, ceil, climate, people, sun, top, windows, watts, room, db.fin.tonnage]);
-  const title = res.r ? `${room} ${len}×${wid} ft → ${res.r.recommendedTons ?? "—"} TR` : room;
+  const title = res.r ? `${room} ${len}×${wid} ft, ${city === "Other" ? "other city" : city} → ${res.r.recommendedTons ?? "—"} TR` : room;
   const send = (quote: boolean) => {
     if (!res.r) return;
     sizingEnquiry(me.id, title, { input, coefficients: db.fin.tonnage }, res.r, quote, me.name);
@@ -61,8 +63,12 @@ export function SizingPage({ db, me, onBack, onBook, flash }: { db: Db; me: Cust
             <div><label style={label}>Width (ft)</label><input inputMode="decimal" value={wid} onChange={(e) => setWid(e.target.value)} style={field} /></div>
             <div><label style={label}>Ceiling (ft)</label><input inputMode="decimal" value={ceil} onChange={(e) => setCeil(e.target.value)} style={field} /></div>
           </div>
-          <label style={{ ...label, marginTop: 12 }}>City weather</label>
-          <select value={climate} onChange={(e) => setClimate(e.target.value)} style={field}>{CLIMATES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          <label style={{ ...label, marginTop: 12 }}>City</label>
+          <select value={city} onChange={(e) => setCity(e.target.value)} style={field}>{CITY_CLIMATE.map(([n]) => <option key={n}>{n}</option>)}<option value="Other">Other city</option></select>
+          {city === "Other" && (<>
+            <label style={{ ...label, marginTop: 12 }}>Summer weather where you live</label>
+            <select value={otherClimate} onChange={(e) => setOtherClimate(e.target.value)} style={field}>{CLIMATES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          </>)}
           <label style={{ ...label, marginTop: 12 }}>Afternoon sunlight</label>
           <Chips options={["Shaded", "Normal", "Heavy sun"]} value={sun === "shaded" ? "Shaded" : sun === "heavy" ? "Heavy sun" : "Normal"} onChange={(v) => setSun(v === "Shaded" ? "shaded" : v === "Heavy sun" ? "heavy" : "normal")} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}><span style={label}>People usually in the room</span>{step(people, setPeople, 1)}</div>
@@ -84,7 +90,7 @@ export function SizingPage({ db, me, onBack, onBook, flash }: { db: Db; me: Cust
         {res.r && (
           <div style={{ ...card, padding: 14, marginTop: 10 }}>
             {res.r.steps.filter((s) => s.btuh > 0).map((s) => <p key={s.label} style={{ ...small, margin: "0 0 4px", display: "flex", justifyContent: "space-between" }}><span>{s.label}</span><b>{formatNum(s.btuh, 0)} BTU/h</b></p>)}
-            <p style={{ ...small, marginTop: 8 }}>We add a {db.fin.tonnage.safetyMarginPct}% margin and pick the next standard size. 1 ton = 12,000 BTU/h.</p>
+            <p style={{ ...small, marginTop: 8 }}>We add a {db.fin.tonnage.safetyMarginPct}% safety allowance and pick the next standard size. 1 ton = 12,000 BTU/h.</p>
             <p style={{ ...small, marginTop: 8, padding: 10, borderRadius: 10, background: "var(--gold-tint)", color: "var(--gold-dark)" }}>{res.r.disclaimer}</p>
           </div>
         )}

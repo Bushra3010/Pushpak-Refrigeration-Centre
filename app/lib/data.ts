@@ -287,6 +287,10 @@ export interface Db {
   payrollRuns: PayrollRun[];
   calcs: SavedCalc[];
   fin: FinanceSettings;
+  /** technician Calculators hub: favourites & recently used, per technician */
+  techPrefs?: Record<string, { fav: string[]; recent: string[] }>;
+  /** saved-data schema version (see upgradeDb) */
+  version?: number;
 }
 
 /* ───────────────────────── Helpers ───────────────────────── */

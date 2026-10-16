@@ -754,3 +754,82 @@ export function sizingEnquiry(customerId: string, title: string, inputs: unknown
 }
 
 export { JOB_FLOW };
+
+/* ───────────────────────── Technician Calculators hub ───────────────────────── */
+
+const prefsOf = (d: Db, techId: string) => ((d.techPrefs ??= {})[techId] ??= { fav: [], recent: [] });
+
+export function toggleFavourite(techId: string, tool: string) {
+  mutate((d) => { const p = prefsOf(d, techId); p.fav = p.fav.includes(tool) ? p.fav.filter((x) => x !== tool) : [...p.fav, tool]; });
+}
+
+export function touchRecent(techId: string, tool: string) {
+  const cur = getSnapshot().techPrefs?.[techId]?.recent ?? [];
+  if (cur[0] === tool) return;
+  mutate((d) => { const p = prefsOf(d, techId); p.recent = [tool, ...p.recent.filter((x) => x !== tool)].slice(0, 6); });
+}
+
+export type ToolSave = Omit<SavedCalc, "at"> & { tool: string };
+
+/**
+ * Saves a hub calculation. `rec.id` is the calculation's own id (new on every Calculate), so a second
+ * tap — or a second tab — can never save it or its estimate lines twice.
+ *  · `lines`: add to the job's estimate — appended while the job is in Diagnosis, or sent as add-on work
+ *    needing the customer's approval once the estimate is approved. Never touches stock or invoices.
+ *  · `note`: diagnostic readings, appended to the job's notes.
+ */
+export function saveToolCalc(rec: ToolSave, opts: { lines?: QuoteLine[]; note?: string } = {}): Err {
+  let err: Err = null;
+  mutate((d) => {
+    if (d.calcs.some((c) => c.id === rec.id)) { err = "Already saved — change the inputs and calculate again for a new record."; return; }
+    const j = rec.jobId ? d.jobs.find((x) => x.id === rec.jobId) : undefined;
+    if (rec.jobId && !j) { err = "Job not found."; return; }
+    if (j && rec.techId && !onJob(j, rec.techId)) { err = "You are not assigned to this job."; return; }
+    if (opts.lines?.length) {
+      if (!j) { err = "Select a job to add these lines to its estimate."; return; }
+      const ref = `calc:${rec.id}`;
+      if (j.lines.some((l) => l.refId === ref)) { err = "These lines are already on the estimate."; return; }
+      const lines = opts.lines.map((l) => ({ ...l, refId: ref }));
+      const step = stepOf(j.status);
+      if (j.status === "Diagnosis" || (step >= 0 && step < stepOf("Diagnosis"))) {
+        j.lines.push(...lines);
+      } else if (step >= stepOf("Approved") && step < stepOf("Work Completed")) {
+        j.lines.push(...lines.map((l) => ({ ...l, addOn: true })));
+        const rev = (j.quote?.revision ?? 1) + 1;
+        j.quote = { no: `QTN-${j.id.slice(2)}-R${rev}`, at: nowIso(), revision: rev, status: "Pending" };
+        stamp(j, "Estimate Prepared", rec.by, `Additional work from ${rec.kind}: ${lines.map((l) => l.name).join(", ")}`);
+        notify(d, `customer:${j.customerId}`, "Additional work needs your approval", `${j.quote.no} · new total ${inr(jobTotals(j, d.settings).total)}`, j.id);
+      } else { err = `${j.id} is ${j.status} — lines can't be added now.`; return; }
+    }
+    if (opts.note) {
+      if (!j) { err = "Select a job to save readings to."; return; }
+      j.notes.push({ at: nowIso(), by: rec.by, text: opts.note });
+    }
+    d.calcs.unshift({ ...rec, at: nowIso() });
+    audit(d, rec.by, "Calculation saved", `${rec.kind} · ${rec.title}${rec.jobId ? ` → ${rec.jobId}` : ""}${opts.lines?.length ? ` · ${opts.lines.length} estimate line(s)` : ""}`);
+  });
+  return err;
+}
+
+/**
+ * Travel / petrol claim from the hub. Always Pending (never auto-approved or reimbursed). One claim per
+ * calculation, and mileage + actual fuel for the same job and day only when the policy allows both.
+ */
+export function createToolClaim(calcRef: string, e: Omit<Expense, "id" | "status" | "calcRef">, by: string): Err {
+  const db0 = getSnapshot();
+  if (db0.expenses.some((x) => x.calcRef === calcRef)) return "A claim for this calculation was already submitted.";
+  if (db0.fin.tools.travel.mode !== "both" && e.claimMethod) {
+    const clash = db0.expenses.find((x) => x.techId === e.techId && x.jobId === e.jobId && x.date === e.date && x.status !== "Rejected" && x.status !== "Reversed" && x.claimMethod && (x.claimMethod !== e.claimMethod || e.claimMethod === "both"));
+    if (clash) return `A ${clash.claimMethod} claim already exists for ${e.jobId ?? "this day"} on ${fmtDate(e.date)} — policy does not allow mileage and actual fuel together.`;
+  }
+  return addExpense({ ...e, status: "Pending", calcRef }, by);
+}
+
+/** Technician asks the office to take unused material back — the office confirms it with the existing issue/return. */
+export function requestReturn(techId: string, items: Record<string, number>, jobId: string | null) {
+  mutate((d) => {
+    const list = Object.entries(items).filter(([, n]) => n > 0).map(([id, n]) => `${d.parts.find((p) => p.id === id)?.name ?? id} × ${n}`);
+    if (!list.length) return;
+    notify(d, "admin", `Return request · ${techName(d, techId)}`, `${list.join(", ")}${jobId ? ` (from ${jobId})` : ""} — confirm in Parts & Inventory`);
+  });
+}

@@ -76,10 +76,11 @@ export function validateCost(c: PipeCostInput): string[] {
   if (!(c.ratePerKg > 0) && !(c.supplierRatePerMetre && c.supplierRatePerMetre > 0))
     errs.push("Enter a copper rate per kg (or a supplier rate per metre).");
   if (c.ratePerKg < 0) errs.push("Rate per kg cannot be negative.");
-  if (c.wastagePct < 0 || c.wastagePct >= 100) errs.push("Wastage must be between 0% and 99%.");
-  if (c.pricing.mode === "margin" && (c.pricing.pct < 0 || c.pricing.pct >= 100))
+  if (c.supplierRatePerMetre != null && !(c.supplierRatePerMetre >= 0)) errs.push("Supplier rate per metre must be a number ≥ 0.");
+  if (!(c.wastagePct >= 0 && c.wastagePct < 100)) errs.push("Wastage must be between 0% and 99%.");
+  if (c.pricing.mode === "margin" && !(c.pricing.pct >= 0 && c.pricing.pct < 100))
     errs.push("Target margin must be between 0% and 99.99%.");
-  if (c.pricing.mode === "markup" && c.pricing.pct < 0) errs.push("Markup cannot be negative.");
+  if (c.pricing.mode === "markup" && !(c.pricing.pct >= 0)) errs.push("Markup must be a number ≥ 0.");
   if (c.densityKgM3 != null && !(c.densityKgM3 > 0)) errs.push("Density must be greater than zero.");
   if (c.taxRatePct != null && c.taxRatePct < 0) errs.push("Tax rate cannot be negative.");
   return errs;

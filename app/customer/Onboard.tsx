@@ -8,32 +8,20 @@ import { Chips, Footer, PageHeader, PrimaryButton, field, label, small } from ".
 import { CUSTOMER_DEMO_PHONE, DEMO_OTP, type CustomerType, type ContactPref } from "../lib/data";
 import type { NewCustomer } from "../lib/store";
 
-/** Brand splash — deep navy so the PRC gradient logo reads the way it was drawn. */
+/** First visit introduction. */
 export function SplashScreen({ onStart }: { onStart: () => void }) {
   return (
-    <div style={{
-      position: "absolute", inset: 0, zIndex: 200,
-      background: "linear-gradient(165deg,#0847c7 0%,#04246b 55%,#020b24 100%)",
-      display: "flex", flexDirection: "column", overflow: "hidden",
-    }}>
-      <div style={{ position: "absolute", right: -80, top: -90, width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(92,207,219,0.35), transparent 70%)" }} />
-      <div style={{ position: "absolute", left: -70, bottom: 140, width: 260, height: 260, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,138,31,0.18), transparent 70%)" }} />
-      {/* Drifting snowflakes, echoing cool air */}
-      {[[12, 18, 26], [78, 12, 18], [64, 30, 14], [20, 62, 16], [84, 58, 22], [42, 80, 12]].map(([x, y, s], i) => (
-        <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, opacity: 0.18 }}><SnowIcon s={s} c="white" w={1.5} /></div>
-      ))}
-
-      <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", zIndex: 1, padding: "0 24px", textAlign: "center" }}>
-        <div style={{ padding: 6, borderRadius: "50%", background: "rgba(255,255,255,0.1)", boxShadow: "0 0 60px rgba(92,207,219,0.35)" }}>
-          <BrandMark size={132} />
-        </div>
-        <h1 style={{ margin: "22px 0 0", fontSize: 30, fontWeight: 800, color: "white", letterSpacing: "-0.02em" }}>Pushpak</h1>
-        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: "0.2em", color: "rgba(255,255,255,0.75)" }}>REFRIGERATION CENTRE</p>
-        <p style={{ margin: "18px 0 0", fontSize: 14.5, color: "rgba(255,255,255,0.75)", maxWidth: 280, lineHeight: 1.5 }}>Smarter AC service. Every repair, part and payment — remembered for every AC you own.</p>
+    <div className="welcome-screen">
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}><BrandMark size={44} /><Wordmark light /></div>
+      <div className="cooling-art" aria-hidden="true"><div className="ac-illustration"><span /><i /><i /><i /></div><div className="air-line" /><div className="air-line" /><div className="air-line" /><SnowIcon s={40} c="#9ed9d9" w={1.2} /></div>
+      <div style={{ position: "relative" }}>
+        <p className="eyebrow" style={{ color: "#9ed9d9" }}>WELCOME TO BETTER AC CARE</p>
+        <h1>Keep your cool.<br />We’ll take care<br />of the rest.</h1>
+        <p className="welcome-copy">Book a service, track your technician, and keep every AC running at its best.</p>
       </div>
-
-      <div style={{ padding: "0 20px calc(28px + env(safe-area-inset-bottom))", position: "relative", zIndex: 1 }}>
+      <div style={{ marginTop: "auto", paddingTop: 26 }}>
         <PrimaryButton tone="gold" onClick={onStart}>Get Started <ArrowRight s={18} c="white" /></PrimaryButton>
+        <p style={{ color: "#b6ced5", fontSize: 10, textAlign: "center", margin: "14px 0 0" }}>SERVICE · REPAIRS · INSTALLATION · AMC</p>
       </div>
     </div>
   );

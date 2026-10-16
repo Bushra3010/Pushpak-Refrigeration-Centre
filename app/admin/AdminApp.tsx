@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { WorkspaceIcon } from "../components/WorkspaceIcon";
 import { BrandMark, Wordmark } from "../components/Brand";
 import { ADMIN_DEMO, fmtDate, jobTotals, today } from "../lib/data";
 import { useDb } from "../lib/store";
@@ -135,7 +136,7 @@ export default function AdminApp() {
                   width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 10, border: "none", cursor: "pointer",
                   background: on ? "rgba(255,255,255,0.14)" : "transparent", color: on ? "white" : "rgba(255,255,255,0.78)", fontSize: 13.5, fontWeight: on ? 700 : 500, textAlign: "left",
                 }}>
-                  <span style={{ width: 20, textAlign: "center" }}>{it.icon}</span>
+                  <span style={{ width: 20, display: "flex", alignItems: "center" }}><WorkspaceIcon name={it.id} /></span>
                   <span style={{ flex: 1 }}>{it.label}</span>
                   {n ? <span style={{ minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: "var(--gold)", color: "white", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{n}</span> : null}
                 </button>
@@ -205,7 +206,7 @@ export default function AdminApp() {
             {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
             {current === "costrules" && <CostRulesSection key={JSON.stringify(db.fin)} db={db} who={who} notify={notify} />}
 
-            <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 11.5, color: "var(--ink-mute)" }}>Demo data · shared with the customer &amp; technician apps in this browser · Supabase coming next</p>
+            <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 11.5, color: "var(--ink-mute)" }}>Pushpak workspace · Demo data shared across apps in this browser</p>
           </main>
         </div>
       </div>
@@ -232,7 +233,7 @@ function AdminLogin({ onDone }: { onDone: () => void }) {
     else setErr(true);
   };
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "linear-gradient(150deg,var(--blue-dark),var(--blue))" }}>
+    <div className="admin-login" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "linear-gradient(150deg,var(--blue-dark),var(--blue))" }}>
       <form onSubmit={submit} className="fade-up" style={{ width: "100%", maxWidth: 380, background: "var(--surface)", borderRadius: 20, padding: 26, boxShadow: "0 20px 50px rgba(4,36,107,0.35)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}><BrandMark size={46} /><Wordmark /></div>
         <h1 style={{ margin: "20px 0 2px", fontSize: 22, fontWeight: 800 }}>Admin panel</h1>

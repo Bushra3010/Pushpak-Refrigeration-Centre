@@ -3,13 +3,14 @@
 import { Fragment, useMemo, useState } from "react";
 import { formatNum } from "../lib/calc/money";
 import { calculatePipeSet, type ExtraLine, type PipeInput, type PricingRule } from "../lib/calc/pipe";
-import { CLIMATE_LABELS, DEFAULT_TONNAGE_COEFFICIENTS, estimateTonnage, type TonnageInput } from "../lib/calc/tonnage";
-import { parseInches } from "../lib/calc/units";
+import { CITY_CLIMATE, CLIMATE_LABELS, DEFAULT_TONNAGE_COEFFICIENTS, estimateTonnage, type TonnageInput } from "../lib/calc/tonnage";
+import { ftToM, mToFt, parseInches } from "../lib/calc/units";
 import { fmtDateTime, stepOf, type Db, type QuoteLine } from "../lib/data";
 import { inr2, pct } from "../lib/finance";
 import { PIPE_PRESETS, type FinanceSettings } from "../lib/finance-types";
 import { saveCalc, updateFin } from "../lib/store";
 import { Badge, Btn, Panel, fieldLabel, input, muted } from "./kit";
+import { ToolRulesPanel } from "./ToolRules";
 
 type PipeState = { label: string; od: string; odUnit: "in" | "mm"; mode: "mm" | "gauge"; wallMm: string; gaugeStd: string; gauge: string; length: string; lengthUnit: "m" | "ft"; qty: string };
 const newPipe = (label: string, od: string, wallMm = ""): PipeState => ({ label, od, odUnit: "in", mode: "mm", wallMm, gaugeStd: "", gauge: "", length: "3", lengthUnit: "m", qty: "1" });
@@ -42,7 +43,9 @@ function CopperCalculator({ db, who, notify }: { db: Db; who: string; notify: (m
   const [rate, setRate] = useState(String(f.copperRatePerKg || ""));
   const [supplier, setSupplier] = useState("");
   const [wastage, setWastage] = useState(String(f.wastagePct));
-  const [rule, setRule] = useState<PricingRule>({ mode: "markup", pct: 25 });
+  const [mode, setMode] = useState<PricingRule["mode"]>("markup");
+  const [rulePct, setRulePct] = useState(String(f.pipeMarkupPct ?? 25));
+  const rule = useMemo<PricingRule>(() => ({ mode, pct: rulePct.trim() === "" ? NaN : Number(rulePct) }), [mode, rulePct]);
   const [tax, setTax] = useState(true);
   const [extras, setExtras] = useState<ExtraLine[]>([
     { kind: "insulation", description: "Insulation tube", quantity: 0, unit: "m", unitCost: 0 },
@@ -65,7 +68,7 @@ function CopperCalculator({ db, who, notify }: { db: Db; who: string; notify: (m
       inputs.push({ label: p.label, od, odUnit: p.odUnit, wallMm: p.mode === "mm" ? (p.wallMm === "" ? null : Number(p.wallMm)) : null, gauge, length: Number(p.length), lengthUnit: p.lengthUnit, quantity: Number(p.qty) });
     }
     try {
-      return { inputs, r: calculatePipeSet(inputs, { ratePerKg: Number(rate || 0), supplierRatePerMetre: supplier ? Number(supplier) : null, wastagePct: Number(wastage || 0), pricing: rule, taxRatePct: tax ? db.settings.gstPercent : null, densityKgM3: f.copperDensity }, extras.filter((e) => e.quantity > 0)) };
+      return { inputs, r: calculatePipeSet(inputs, { ratePerKg: Number(rate || 0), supplierRatePerMetre: supplier ? Number(supplier) : null, wastagePct: wastage.trim() === "" ? 0 : Number(wastage), pricing: rule, taxRatePct: tax ? db.settings.gstPercent : null, densityKgM3: f.copperDensity }, extras.filter((e) => e.quantity > 0)) };
     } catch (e) { return { error: (e as Error).message }; }
   }, [pipes, rate, supplier, wastage, rule, tax, extras, f, db.settings.gstPercent]);
   const r = "r" in calc ? calc.r : null;
@@ -115,8 +118,8 @@ function CopperCalculator({ db, who, notify }: { db: Db; who: string; notify: (m
             <label><span style={fieldLabel}>Copper ₹ / kg</span><input type="number" min={0} value={rate} onChange={(e) => setRate(e.target.value)} style={input} /></label>
             <label><span style={fieldLabel}>Supplier ₹ / metre (optional)</span><input type="number" min={0} value={supplier} onChange={(e) => setSupplier(e.target.value)} style={input} /></label>
             <label><span style={fieldLabel}>Wastage %</span><input type="number" min={0} max={99} value={wastage} onChange={(e) => setWastage(e.target.value)} style={input} /></label>
-            <label><span style={fieldLabel}>Pricing</span><select value={rule.mode} onChange={(e) => setRule({ ...rule, mode: e.target.value as PricingRule["mode"] })} style={input}><option value="markup">Markup on cost</option><option value="margin">Target margin</option></select></label>
-            <label><span style={fieldLabel}>{rule.mode === "markup" ? "Markup %" : "Margin %"}</span><input type="number" min={0} value={rule.pct} onChange={(e) => setRule({ ...rule, pct: Number(e.target.value) })} style={input} /></label>
+            <label><span style={fieldLabel}>Pricing</span><select value={mode} onChange={(e) => setMode(e.target.value as PricingRule["mode"])} style={input}><option value="markup">Markup on cost</option><option value="margin">Target margin</option></select></label>
+            <label><span style={fieldLabel}>{rule.mode === "markup" ? "Markup %" : "Margin %"}</span><input type="number" min={0} value={rulePct} onChange={(e) => setRulePct(e.target.value)} style={input} /></label>
             <label><span style={fieldLabel}>GST {db.settings.gstPercent}% (separate)</span><span style={{ display: "flex", alignItems: "center", gap: 6, height: 38 }}><input type="checkbox" checked={tax} onChange={(e) => setTax(e.target.checked)} /> Apply</span></label>
           </div>
           <p style={{ ...muted, margin: "8px 0 0" }}>Density {f.copperDensity} kg/m³ — {f.densitySource}</p>
@@ -162,22 +165,42 @@ function CopperCalculator({ db, who, notify }: { db: Db; who: string; notify: (m
 
 /* ───────────── Tonnage ───────────── */
 
+type TonnageForm = Omit<TonnageInput, "lengthValue" | "widthValue" | "ceilingValue" | "occupants" | "windowAreaSqft" | "applianceWatts"> & {
+  lengthValue: string; widthValue: string; ceilingValue: string; occupants: string; windowAreaSqft: string; applianceWatts: string; city: string;
+};
+const TONNAGE_NUMS = ["lengthValue", "widthValue", "ceilingValue", "occupants", "windowAreaSqft", "applianceWatts"] as const;
+
 function TonnageEstimator({ db, who, notify }: { db: Db; who: string; notify: (m: string) => void }) {
   const c = db.fin.tonnage;
-  const [i, setI] = useState<TonnageInput>({ lengthValue: 12, widthValue: 10, dimensionUnit: "ft", ceilingValue: 10, climate: "hot_dry", occupants: 2, sunlight: "normal", roof: "intermediate_floor", insulation: "average", windowAreaSqft: 15, applianceWatts: 200, isKitchen: false });
-  const res = useMemo(() => { try { return { r: estimateTonnage(i, c) }; } catch (e) { return { e: (e as Error).message }; } }, [i, c]);
-  const num = (k: keyof TonnageInput, label: string) => <label><span style={fieldLabel}>{label}</span><input type="number" min={0} step="0.1" value={String(i[k])} onChange={(e) => setI({ ...i, [k]: Number(e.target.value) })} style={input} /></label>;
+  // fields are kept as typed text so decimals ("3.5") and empty fields edit naturally; parsed only for the estimate
+  const [i, setI] = useState<TonnageForm>({ lengthValue: "12", widthValue: "10", dimensionUnit: "ft", ceilingValue: "10", city: "Delhi / NCR", climate: "hot_dry", occupants: "2", sunlight: "normal", roof: "intermediate_floor", insulation: "average", windowAreaSqft: "15", applianceWatts: "250", isKitchen: false });
+  const parsed = useMemo<TonnageInput>(() => {
+    const out = { ...i } as Record<string, unknown>;
+    for (const k of TONNAGE_NUMS) out[k] = i[k].trim() === "" ? NaN : Number(i[k]);
+    delete out.city;
+    return out as unknown as TonnageInput;
+  }, [i]);
+  const res = useMemo(() => { try { return { r: estimateTonnage(parsed, c) }; } catch (e) { return { e: (e as Error).message }; } }, [parsed, c]);
+  const num = (k: (typeof TONNAGE_NUMS)[number], label: string) => <label><span style={fieldLabel}>{label}</span><input type="text" inputMode="decimal" value={i[k]} onChange={(e) => setI({ ...i, [k]: e.target.value })} style={input} aria-label={label} /></label>;
+  // switching units converts the room dimensions instead of reinterpreting 12 ft as 12 m
+  const setUnit = (u: "ft" | "m") => {
+    if (u === i.dimensionUnit) return;
+    const conv = (v: string) => { const n = Number(v); return v.trim() === "" || !Number.isFinite(n) ? v : String(Math.round((u === "m" ? ftToM(n) : mToFt(n)) * 100) / 100); };
+    setI({ ...i, dimensionUnit: u, lengthValue: conv(i.lengthValue), widthValue: conv(i.widthValue), ceilingValue: conv(i.ceilingValue) });
+  };
   const save = (title: string, customerId: string | null, jobId: string | null) => {
-    const err = saveCalc({ kind: "Tonnage", title, customerId, jobId, by: who, inputs: { input: i, coefficients: c }, outputs: res.r }, null);
-    notify(err ? `⚠ ${err}` : "Estimate saved");
+    if (!res.r) return;
+    const err = saveCalc({ kind: "Tonnage", title, customerId, jobId, by: who, inputs: { input: parsed, city: i.city, coefficients: c }, outputs: res.r }, null);
+    notify(err ? `⚠ ${err}` : jobId ? `Estimate saved and attached to ${jobId}` : "Estimate saved");
   };
   return (
     <div className="admin-grid-2">
       <Panel title="Room details">
         <div style={grid()}>
-          <label><span style={fieldLabel}>Units</span><select value={i.dimensionUnit} onChange={(e) => setI({ ...i, dimensionUnit: e.target.value as "ft" | "m" })} style={input}><option value="ft">Feet</option><option value="m">Metres</option></select></label>
+          <label><span style={fieldLabel}>Units</span><select value={i.dimensionUnit} onChange={(e) => setUnit(e.target.value as "ft" | "m")} style={input}><option value="ft">Feet</option><option value="m">Metres</option></select></label>
           {num("lengthValue", `Length (${i.dimensionUnit})`)}{num("widthValue", `Width (${i.dimensionUnit})`)}{num("ceilingValue", `Ceiling (${i.dimensionUnit})`)}
-          <label style={{ gridColumn: "span 2" }}><span style={fieldLabel}>City / climate</span><select value={i.climate} onChange={(e) => setI({ ...i, climate: e.target.value })} style={input}>{Object.keys(c.climate).map((k) => <option key={k} value={k}>{CLIMATE_LABELS[k] ?? k} (×{c.climate[k]})</option>)}</select></label>
+          <label><span style={fieldLabel}>City</span><select value={i.city} onChange={(e) => { const z = CITY_CLIMATE.find(([n]) => n === e.target.value)?.[1]; setI({ ...i, city: e.target.value, climate: z && c.climate[z] != null ? z : i.climate }); }} style={input}>{CITY_CLIMATE.map(([n]) => <option key={n}>{n}</option>)}<option value="Other">Other — choose climate</option></select></label>
+          <label><span style={fieldLabel}>Climate zone</span><select value={i.climate} onChange={(e) => setI({ ...i, climate: e.target.value, city: CITY_CLIMATE.some(([n, z]) => n === i.city && z === e.target.value) ? i.city : "Other" })} style={input}>{Object.keys(c.climate).map((k) => <option key={k} value={k}>{CLIMATE_LABELS[k] ?? k} (×{c.climate[k]})</option>)}</select></label>
           {num("occupants", "Occupants")}
           <label><span style={fieldLabel}>Sunlight</span><select value={i.sunlight} onChange={(e) => setI({ ...i, sunlight: e.target.value as TonnageInput["sunlight"] })} style={input}><option value="shaded">Shaded</option><option value="normal">Normal</option><option value="heavy">Heavy sun</option></select></label>
           <label><span style={fieldLabel}>Roof exposure</span><select value={i.roof} onChange={(e) => setI({ ...i, roof: e.target.value as TonnageInput["roof"] })} style={input}><option value="intermediate_floor">Floor above</option><option value="top_floor_roof_exposed">Top floor</option><option value="single_storey_roof_exposed">Single storey / tin roof</option></select></label>
@@ -311,6 +334,7 @@ export function CostRulesSection({ db, who, notify }: { db: Db; who: string; not
         </div>
         <p style={{ ...muted, margin: "8px 0 0" }}>{t.source}</p>
       </Panel>
+      <ToolRulesPanel db={db} who={who} notify={notify} />
     </div>
   );
 }

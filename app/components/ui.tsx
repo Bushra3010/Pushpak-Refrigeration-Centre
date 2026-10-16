@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { BrandMark, Wordmark } from "./Brand";
 import { BackIcon, ChevronRight } from "./icons";
 
 /* Mobile building blocks shared by the customer and technician apps (ported from zevto). */
@@ -75,7 +77,6 @@ export function PrimaryButton({ children, onClick, disabled, tone = "blue", styl
   children: React.ReactNode; onClick?: () => void; disabled?: boolean; tone?: "blue" | "gold" | "green"; style?: React.CSSProperties; type?: "button" | "submit";
 }) {
   const bg = tone === "gold" ? "linear-gradient(135deg,var(--gold),var(--gold-dark))" : tone === "green" ? "linear-gradient(135deg,#22a06b,#15803d)" : "linear-gradient(135deg,var(--blue),var(--blue-dark))";
-  const glow = tone === "gold" ? "0 6px 16px rgba(255,138,31,0.38)" : tone === "green" ? "0 6px 16px rgba(21,128,61,0.3)" : "0 6px 16px rgba(11,92,255,0.30)";
   return (
     <button type={type} onClick={onClick} disabled={disabled} className="press" style={{
       width: "100%", border: "none", borderRadius: 16, padding: "15px 18px",
@@ -83,7 +84,7 @@ export function PrimaryButton({ children, onClick, disabled, tone = "blue", styl
       display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
       background: disabled ? "var(--line-strong)" : bg,
       color: disabled ? "var(--ink-mute)" : "white",
-      boxShadow: disabled ? "none" : glow,
+      boxShadow: "none",
       ...style,
     }}>{children}</button>
   );
@@ -100,7 +101,7 @@ export function GhostButton({ children, onClick, danger, style }: { children: Re
 }
 
 export const card: React.CSSProperties = {
-  background: "var(--surface)", borderRadius: 18, boxShadow: "var(--shadow-card)",
+  background: "var(--surface)", borderRadius: 16, boxShadow: "var(--shadow-card)",
 };
 
 export const label: React.CSSProperties = {
@@ -251,9 +252,9 @@ export function PillNav<T extends string>({ tabs, active, onChange }: {
 }) {
   return (
     <div className="no-print" style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 14px calc(10px + env(safe-area-inset-bottom))", pointerEvents: "none", zIndex: 50 }}>
-      <nav style={{
+      <nav aria-label="Main navigation" style={{
         display: "flex", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-        borderRadius: 999, padding: 4, boxShadow: "0 8px 24px rgba(15,23,41,0.14)", pointerEvents: "auto",
+        borderRadius: 20, padding: 6, boxShadow: "0 4px 24px rgba(23,43,58,0.12)", pointerEvents: "auto",
       }}>
         {tabs.map((t) => {
           const on = t.id === active;
@@ -261,7 +262,7 @@ export function PillNav<T extends string>({ tabs, active, onChange }: {
           return (
             <button key={t.id} aria-label={t.label} aria-current={on ? "page" : undefined} onClick={() => onChange(t.id)} style={{
               flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, position: "relative",
-              background: on ? "var(--blue-tint)" : "transparent", border: "none", borderRadius: 999, cursor: "pointer", padding: "6px 0 5px",
+              background: on ? "var(--blue-tint)" : "transparent", border: "none", borderRadius: 14, cursor: "pointer", padding: "8px 0 7px",
               transition: "background 0.2s",
             }}>
               {t.icon(color)}
@@ -281,13 +282,22 @@ export function PillNav<T extends string>({ tabs, active, onChange }: {
   );
 }
 
-/** 430px phone shell — the page never scrolls, only the content area. */
-export function PhoneShell({ children }: { children: React.ReactNode }) {
+/** Responsive mobile workspace with a desktop companion panel. */
+export function PhoneShell({ children, role = "customer" }: { children: React.ReactNode; role?: "customer" | "technician" }) {
+  const technician = role === "technician";
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--app-bg)", display: "flex", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 430, height: "100%", position: "relative", background: "var(--app-bg)", overflow: "hidden", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column" }}>
-        {children}
-      </div>
+    <div className="workspace-backdrop">
+      <aside className="workspace-intro">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><BrandMark size={48} /><Wordmark /></div>
+        <h2>{technician ? <>Great service.<br />Starts with you.</> : <>A little care.<br />A lot more cool.</>}</h2>
+        <p>{technician ? "Your working day, in one place. Stay on top of your jobs, keep track of parts, and take care of every customer." : "From the first booking to the final repair, keep your home comfortable with AC care from Pushpak."}</p>
+        <div className="workspace-links" aria-label="Switch workspace">
+          <Link href="/" aria-current={!technician ? "page" : undefined}>Customer</Link>
+          <Link href="/technician" aria-current={technician ? "page" : undefined}>Technician</Link>
+          <Link href="/admin">Admin ↗</Link>
+        </div>
+      </aside>
+      <div className={`phone-workspace ${role}-workspace`}>{children}</div>
     </div>
   );
 }

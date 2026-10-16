@@ -13,11 +13,16 @@ import { BTUH_PER_TON, BTUH_PER_WATT, SQFT_PER_SQM, mToFt } from "./units";
  *   7. Total BTU/h    = (2 + 3 + 4 + 5 + 6); tons = BTU/h ÷ 12,000
  *   8. Recommended    = smallest capacity in `availableTons` ≥ tons × (1 + safetyMarginPct)
  *
- * Basis: occupant (600 BTU/h each above two people), sun (±10 %) and kitchen
- * (+4,000 BTU/h) adjustments follow the ENERGY STAR room air-conditioner sizing
- * guidance; the base BTU/ft², climate, roof, insulation and window factors are
- * company defaults to be tuned from field experience. This is NOT a
- * Manual J / ISHRAE heat-load calculation and carries no accuracy claim.
+ * Calibration: the base BTU/ft² is set for Indian conditions so that a typical
+ * 120 ft² room with a 10 ft ceiling in a hot city (two people, one window,
+ * lights + TV) comes to ≈ 1 TR — the common Indian trade rule of thumb of
+ * roughly 1 TR per 100–120 ft² (also what desiutility.com's calculator uses:
+ * area ÷ 120, rounded up to a standard size). The earlier US ENERGY STAR base of
+ * 20 BTU/ft² assumes temperate climates and under-sized Indian rooms ~4–5×.
+ * Occupant (600 BTU/h each above two) and kitchen (+4,000 BTU/h) allowances
+ * follow ENERGY STAR room AC guidance. All factors are company defaults to be
+ * tuned from field experience. This is NOT a Manual J / ISHRAE heat-load
+ * calculation and carries no accuracy claim.
  */
 export type TonnageCoefficients = {
   baseBtuPerSqft: number;
@@ -36,8 +41,8 @@ export type TonnageCoefficients = {
 };
 
 export const DEFAULT_TONNAGE_COEFFICIENTS: TonnageCoefficients = {
-  baseBtuPerSqft: 20,
-  referenceCeilingFt: 8,
+  baseBtuPerSqft: 70,
+  referenceCeilingFt: 10,
   climate: {
     moderate: 1.0,
     warm_humid: 1.1,
@@ -51,11 +56,14 @@ export const DEFAULT_TONNAGE_COEFFICIENTS: TonnageCoefficients = {
   btuPerExtraOccupant: 600,
   btuPerWindowSqft: 30,
   kitchenBtu: 4000,
-  safetyMarginPct: 10,
+  safetyMarginPct: 5,
   availableTons: [0.75, 1, 1.5, 2, 2.5, 3, 4, 5],
   source:
-    "Company default rule-of-thumb. Occupant, sunlight and kitchen adjustments per ENERGY STAR room AC sizing guidance; other factors are editable assumptions.",
+    "Company default rule of thumb calibrated to Indian sizing practice (≈ 1 TR per 120 ft² at a 10 ft ceiling in a hot city). Occupant and kitchen allowances per ENERGY STAR room AC guidance; every factor is an editable assumption.",
 };
+
+/** Earlier shipped defaults (US ENERGY STAR base); saved settings still on these are upgraded. */
+export const LEGACY_TONNAGE_BASE = { baseBtuPerSqft: 20, referenceCeilingFt: 8 } as const;
 
 export const CLIMATE_LABELS: Record<string, string> = {
   moderate: "Moderate (e.g. Bengaluru, Pune)",
@@ -63,6 +71,14 @@ export const CLIMATE_LABELS: Record<string, string> = {
   hot_dry: "Hot & dry (e.g. Delhi NCR, Jaipur, Nagpur)",
   extreme_hot: "Extreme summer heat (e.g. Rajasthan desert belt)",
 };
+
+/** City → climate zone shortcut. Choose "Other" and pick the zone directly for unlisted towns. */
+export const CITY_CLIMATE: [city: string, zone: string][] = [
+  ["Delhi / NCR", "hot_dry"], ["Jaipur", "hot_dry"], ["Lucknow", "hot_dry"], ["Ahmedabad", "hot_dry"], ["Nagpur", "hot_dry"],
+  ["Hyderabad", "hot_dry"], ["Chandigarh", "hot_dry"], ["Jodhpur / Bikaner", "extreme_hot"], ["Mumbai", "warm_humid"],
+  ["Chennai", "warm_humid"], ["Kolkata", "warm_humid"], ["Kochi", "warm_humid"], ["Visakhapatnam", "warm_humid"],
+  ["Bengaluru", "moderate"], ["Pune", "moderate"], ["Dehradun", "moderate"],
+];
 
 export type TonnageInput = {
   lengthValue: number;
@@ -99,9 +115,9 @@ export function validateTonnage(i: TonnageInput, c: TonnageCoefficients): string
   const e: string[] = [];
   if (!(i.lengthValue > 0) || !(i.widthValue > 0)) e.push("Room length and width must be greater than zero.");
   if (!(i.ceilingValue > 0)) e.push("Ceiling height must be greater than zero.");
-  if (i.occupants < 0 || !Number.isInteger(i.occupants)) e.push("Occupants must be a whole number ≥ 0.");
-  if (i.windowAreaSqft < 0) e.push("Window area cannot be negative.");
-  if (i.applianceWatts < 0) e.push("Appliance heat cannot be negative.");
+  if (!(i.occupants >= 0) || !Number.isInteger(i.occupants)) e.push("Occupants must be a whole number ≥ 0.");
+  if (!(i.windowAreaSqft >= 0)) e.push("Window area must be a number ≥ 0.");
+  if (!(i.applianceWatts >= 0)) e.push("Appliance heat must be a number ≥ 0 W.");
   if (c.climate[i.climate] == null) e.push("Select a climate zone.");
   return e;
 }
@@ -153,7 +169,7 @@ export function estimateTonnage(i: TonnageInput, c: TonnageCoefficients = DEFAUL
     recommendationNote:
       rec == null
         ? `Load exceeds the largest configured capacity (${sorted.at(-1)} TR). Consider multiple units or a ducted/VRF system after a professional assessment.`
-        : `Smallest configured capacity ≥ ${withMargin.toFixed(2)} TR (estimate + ${c.safetyMarginPct}% margin).`,
+        : `Smallest configured capacity ≥ ${withMargin.toFixed(2)} TR (estimate + ${c.safetyMarginPct}% safety allowance).`,
     disclaimer: TONNAGE_DISCLAIMER,
   };
 }

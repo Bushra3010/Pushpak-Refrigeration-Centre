@@ -7,6 +7,8 @@
 import { SLOTS, isDone, isoAt, isoDay, jobTotals, stepOf, type Db, type Job, type QuoteLine } from "./data";
 import { DEFAULT_FINANCE_SETTINGS, type Expense, type TimeLog } from "./finance-types";
 import { addMonths, buildPayrollRun, completedOn, currentMonth, monthOf } from "./finance";
+import { DEFAULT_TONNAGE_COEFFICIENTS, LEGACY_TONNAGE_BASE } from "./calc/tonnage";
+import { DEFAULT_TOOL_SETTINGS } from "./tool-settings";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const at = (date: string, minutes: number) => `${date}T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
@@ -48,6 +50,8 @@ export function withFinanceSeed(db: Db): Db {
   const thisMonth = currentMonth();
   const prev = addMonths(thisMonth, -1);
   db.fin = structuredClone(DEFAULT_FINANCE_SETTINGS);
+  db.techPrefs = {};
+  db.version = DB_VERSION;
   db.holidays = [{ date: `${today.slice(0, 4)}-08-15`, name: "Independence Day" }, { date: `${today.slice(0, 4)}-10-02`, name: "Gandhi Jayanti" }];
 
   db.salaries = [
@@ -166,8 +170,21 @@ export function withFinanceSeed(db: Db): Db {
 const jobTechs = (j: Job) => [j.techId, ...(j.helpers ?? [])].filter((x): x is string => Boolean(x));
 
 /** Data saved by an older demo version has no finance collections — add the demo ones. */
+/** Saved-data schema version. Bump and add a step below whenever the shape of saved demo data changes. */
+export const DB_VERSION = 2;
+
+/** Upgrades data saved by older versions of the demo, step by step, keeping every customer, job, estimate and setting. */
 export function upgradeDb(db: Db): Db {
-  if (Array.isArray(db.timeLogs) && db.fin) return db;
-  return withFinanceSeed({ ...db, jobs: db.jobs.filter((j) => !/^J-2\d{3}$/.test(j.id)) } as Db);
+  if (!(Array.isArray(db.timeLogs) && db.fin)) db = withFinanceSeed({ ...db, jobs: db.jobs.filter((j) => !/^J-2\d{3}$/.test(j.id)) } as Db);
+  const v = db.version ?? 1;
+  if (v >= DB_VERSION && db.fin.tools) return db;
+  let fin = db.fin;
+  // v1 → v2 (a): tonnage coefficients still on the old US base (20 BTU/ft² at 8 ft) under-size Indian rooms ~4–5×
+  const t = fin.tonnage;
+  if (!t || (t.baseBtuPerSqft === LEGACY_TONNAGE_BASE.baseBtuPerSqft && t.referenceCeilingFt === LEGACY_TONNAGE_BASE.referenceCeilingFt))
+    fin = { ...fin, tonnage: structuredClone(DEFAULT_TONNAGE_COEFFICIENTS) };
+  // v1 → v2 (b): technician Calculators hub — admin rates & reference data (fill any missing keys, keep edited ones)
+  fin = { ...fin, tools: { ...structuredClone(DEFAULT_TOOL_SETTINGS), ...(fin.tools ?? {}) } };
+  return { ...db, fin, techPrefs: db.techPrefs ?? {}, version: DB_VERSION };
 }
 

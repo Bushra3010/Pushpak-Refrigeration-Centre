@@ -87,5 +87,10 @@ Gauge thickness comes only from sourced tables (Cost & Calc Rules); SWG ships **
 Base BTU/h per ft² × height factor × climate × sunlight × roof × insulation, + 600 BTU/h per
 occupant above two, + window area × factor × sunlight, + appliance watts × 3.412, + 4,000 BTU/h for
 kitchens. Tons = BTU/h ÷ 12,000; suggested size = smallest configured capacity ≥ estimate ×
-(1 + safety margin). All coefficients are editable. Results are preliminary — complex sites need a
+(1 + safety margin). All coefficients are editable.
+
+Defaults (70 BTU/h per ft² at a 10 ft reference ceiling, 5% margin) are calibrated to Indian sizing
+practice of about 1 TR per 120 ft²: a 120 ft² room in Delhi gives 1 TR, 150 ft² gives 1.5 TR, and a
+top floor adds a size. The original US ENERGY STAR base (20 BTU/ft² at 8 ft) under-sized Indian rooms
+4–5×. Saved settings still on it are upgraded automatically. City presets map to climate zones. Results are preliminary — complex sites need a
 professional heat-load assessment.

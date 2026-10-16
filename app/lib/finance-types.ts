@@ -4,6 +4,7 @@
 
 import { DEFAULT_TONNAGE_COEFFICIENTS, type TonnageCoefficients } from "./calc/tonnage";
 import { DEFAULT_COPPER_DENSITY, DEFAULT_DENSITY_SOURCE } from "./calc/pipe";
+import { DEFAULT_TOOL_SETTINGS, type ToolSettings } from "./tool-settings";
 
 export type TimeKind = "Travel" | "Work" | "Break";
 export type TimeStatus = "Running" | "Submitted" | "Approved" | "Rejected";
@@ -87,6 +88,9 @@ export interface Expense {
   note: string;
   submittedBy: string;
   reviewNote?: string;
+  /** travel claims from the Calculators hub: which method, and the calculation that produced it (one claim per calculation) */
+  claimMethod?: "mileage" | "actual" | "both";
+  calcRef?: string;
   /** set once when an employee-paid claim is repaid — repayment is never a new expense */
   reimbursed?: { how: "Payroll" | "Direct"; ref: string; at: string };
 }
@@ -124,7 +128,14 @@ export interface GaugeStandard {
 
 export interface SavedCalc {
   id: string;
-  kind: "Copper pipe" | "Tonnage";
+  /** "Copper pipe" / "Tonnage" from the admin calculators, or the technician hub calculator name */
+  kind: string;
+  /** technician hub calculator id (e.g. "drain-pipe") */
+  tool?: string;
+  /** technician who saved it (hub) */
+  techId?: string;
+  /** customer-safe result lines, used for history, print and share */
+  summary?: { k: string; v: string }[];
   title: string;
   customerId: string | null;
   jobId: string | null; // quotation = the job's estimate
@@ -149,6 +160,8 @@ export interface FinanceSettings {
   gauges: GaugeStandard[];
   /** technician ids allowed to see their own salary & payslips in the technician app */
   salaryVisibleTo: string[];
+  /** technician Calculators hub: customer rates, packages, reference data (app/lib/tool-settings.ts) */
+  tools: ToolSettings;
 }
 
 const inch = (v: number) => Math.round(v * 25.4 * 10000) / 10000;
@@ -174,6 +187,7 @@ export const DEFAULT_FINANCE_SETTINGS: FinanceSettings = {
     },
   ],
   salaryVisibleTo: ["t1"],
+  tools: DEFAULT_TOOL_SETTINGS,
 };
 
 /** ASTM B280 ACR nominal OD × wall presets (inches), for quick entry. Verify against the current standard. */

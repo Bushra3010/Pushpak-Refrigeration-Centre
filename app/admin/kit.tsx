@@ -30,7 +30,7 @@ export function Panel({ title, actions, children, pad = true }: { title?: React.
 
 export function Stat({ label, value, sub, tone = "blue" }: { label: string; value: string; sub?: string; tone?: Tone }) {
   return (
-    <div style={{ background: "var(--surface)", borderRadius: 16, padding: "14px 16px", boxShadow: "var(--shadow-card)", border: "1px solid var(--line)", borderTop: `3px solid ${TONES[tone].fg}` }}>
+    <div className="admin-stat" style={{ "--stat-tint": TONES[tone].bg, background: "var(--surface)", borderRadius: 16, padding: "20px", boxShadow: "var(--shadow-card)", border: "1px solid var(--line)", } as React.CSSProperties}>
       <p style={{ margin: 0, fontSize: 12, color: "var(--ink-soft)", fontWeight: 500 }}>{label}</p>
       <p style={{ margin: "4px 0 0", fontSize: 22, fontWeight: 800, color: "var(--ink)" }}>{value}</p>
       {sub && <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "var(--ink-mute)" }}>{sub}</p>}

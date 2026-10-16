@@ -46,6 +46,28 @@ describe("new screens render with the demo data", () => {
     cleanup();
   });
 
+  it("tonnage: 12×10 ft Delhi room suggests 1 TR; switching to metres converts, decimals and blanks edit cleanly", () => {
+    render(<CalculatorsSection db={db} who="Admin" notify={noop} />);
+    fireEvent.click(screen.getByText("AC tonnage estimator"));
+    expect(screen.getByText("1 TR")).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("Feet"), { target: { value: "m" } });
+    const len = screen.getByLabelText("Length (m)") as HTMLInputElement;
+    expect(len.value).toBe("3.66");
+    expect(screen.getByText("1 TR")).toBeTruthy(); // same room, so the same size
+    fireEvent.change(len, { target: { value: "4." } });
+    expect(len.value).toBe("4.");
+    fireEvent.change(len, { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/length and width/);
+    cleanup();
+  });
+
+  it("pipe: clearing markup shows a validation message instead of a wrong price", () => {
+    render(<CalculatorsSection db={db} who="Admin" notify={noop} />);
+    fireEvent.change(screen.getByDisplayValue(String(db.fin.pipeMarkupPct)), { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Markup/);
+    cleanup();
+  });
+
   it("profit cards open their records", () => {
     render(<ProfitSection db={db} openJob={noop} />);
     fireEvent.click(screen.getByText("Payments collected"));
