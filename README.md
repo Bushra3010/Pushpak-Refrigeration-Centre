@@ -37,13 +37,14 @@ allowances, room/food, petrol/travel and overhead — reconciled to company prof
 | Admin → **Cost & Calc Rules** | Allocation rules, salary visibility, copper density + source, gauge tables with sources/verification, tonnage coefficients. |
 | Admin → job → **Team, time & profit** | Helpers (multi-technician), approved revenue split, time log, job expenses, estimated vs actual profit, log a callback. |
 | Admin → **Reports** | CSV exports: job & technician profitability, payroll & allowances, material consumption, inventory, receivables, monthly operating profit, estimate vs actual. |
-| Technician app | Job timer (travel / work / break / resume / stop — never overlapping), expense claims, my hours & corrections, my payslips (if allowed). |
+| Technician app | Job timer (travel / work / break / resume / stop — never overlapping), expense claims, my hours & corrections, my payslips (if allowed), copper pipe calculator (estimate → "📐 Pipe calc", and Stock tab) showing weight & customer price only. |
+| Customer app | Home → "Buying a new AC? Find the right size" — tonnage estimate with recommended size and an installation-quote request that notifies the office. |
 
 Older saved demo data is upgraded automatically (Settings → Reset demo restores the full sample).
 In this demo the role picker and data live in the browser; real authentication, database storage and
 server-side permission checks arrive with the Supabase step.
 
 ```bash
-npm test   # 76 tests: pipe/tonnage/markup-vs-margin, payroll allocation, revenue split,
+npm test   # 78 tests: pipe/tonnage/markup-vs-margin, payroll allocation, revenue split,
            # reconciliation example, demo data, store flows (timer, locks, duplicate prevention), UI render
 ```

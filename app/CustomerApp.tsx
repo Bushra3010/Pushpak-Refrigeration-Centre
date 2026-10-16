@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BookService } from "./customer/Booking";
+import { SizingPage } from "./customer/Sizing";
 import { CustomerJobPage, InvoicePage } from "./customer/JobPage";
 import { LoginScreen, SignupFlow, SplashScreen } from "./customer/Onboard";
 import {
@@ -27,7 +28,8 @@ type Detail =
   | { k: "bookings" }
   | { k: "amc" }
   | { k: "payments" }
-  | { k: "info"; which: "help" | "about" };
+  | { k: "info"; which: "help" | "about" }
+  | { k: "sizing" };
 
 const readSession = () => { try { return localStorage.getItem(SESSION_KEY); } catch { return null; } };
 const writeSession = (id: string | null) => { try { if (id) localStorage.setItem(SESSION_KEY, id); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked */ } };
@@ -164,12 +166,13 @@ export default function CustomerApp() {
         {detail?.k === "amc" && <AmcPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} />}
         {detail?.k === "payments" && <PaymentsPage db={db} me={me} onBack={back} onOpenJob={(id) => push({ k: "job", id })} />}
         {detail?.k === "info" && <InfoPage which={detail.which} db={db} onBack={back} />}
+        {detail?.k === "sizing" && <SizingPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} flash={flash} />}
 
         {/* ── Tabs ── */}
         {!detail && tab === "home" && (
           <HomeScreen db={db} me={me} unread={unread} onBook={(acId) => push({ k: "book", acId })} onOpenJob={(id) => push({ k: "job", id })}
             onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} onNotifications={() => push({ k: "notifications" })}
-            onAmc={() => push({ k: "amc" })} onAllJobs={() => goTab("bookings")} />
+            onAmc={() => push({ k: "amc" })} onAllJobs={() => goTab("bookings")} onSizing={() => push({ k: "sizing" })} />
         )}
         {!detail && tab === "acs" && <AcsScreen db={db} me={me} onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} />}
         {!detail && tab === "bookings" && <BookingsScreen db={db} me={me} onOpenJob={(id) => push({ k: "job", id })} />}

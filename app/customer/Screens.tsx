@@ -18,9 +18,9 @@ const serviceDue = (db: Db, ac: AcUnit) => { const s = acSummary(db, ac.id); ret
 
 /* ───────────────────────── Home ───────────────────────── */
 
-export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddAc, onNotifications, onAmc, onAllJobs }: {
+export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddAc, onNotifications, onAmc, onAllJobs, onSizing }: {
   db: Db; me: Customer; unread: number; onBook: (acId?: string) => void; onOpenJob: (id: string) => void; onOpenAc: (id: string) => void;
-  onAddAc: () => void; onNotifications: () => void; onAmc: () => void; onAllJobs: () => void;
+  onAddAc: () => void; onNotifications: () => void; onAmc: () => void; onAllJobs: () => void; onSizing?: () => void;
 }) {
   const jobs = myJobs(db, me);
   const acs = db.acs.filter((a) => a.customerId === me.id);
@@ -54,6 +54,17 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
           <p style={{ margin: 0, fontSize: 12.5, color: "rgba(255,255,255,0.78)" }}>Approve the quote before any work starts.</p>
           <button onClick={() => onBook()} className="press" style={{ marginTop: 14, border: "none", borderRadius: 12, padding: "10px 16px", background: "var(--gold)", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 6px 14px rgba(255,138,31,0.4)" }}>Book Service</button>
         </div>
+
+        {onSizing && (
+          <button onClick={onSizing} className="press" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "none", cursor: "pointer", textAlign: "left", display: "flex", gap: 12, alignItems: "center" }}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, background: "var(--blue-tint)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📏</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Buying a new AC? Find the right size</span>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>1, 1.5 or 2 ton? Free estimate in a minute + installation quote</span>
+            </span>
+            <ChevronRight s={16} c="var(--ink-mute)" />
+          </button>
+        )}
 
         {/* Things waiting on the customer */}
         {needsApproval.map((j) => (

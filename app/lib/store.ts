@@ -740,4 +740,17 @@ export function saveCalc(c: Omit<SavedCalc, "id" | "at">, lines: QuoteLine[] | n
   return err;
 }
 
+/** Customer-app sizing estimate: saved against the customer; optionally asks the office for an installation quote. */
+export function sizingEnquiry(customerId: string, title: string, inputs: unknown, outputs: unknown, wantsQuote: boolean, by: string) {
+  mutate((d) => {
+    d.calcs.unshift({ id: `calc${uid()}`, kind: "Tonnage", title, customerId, jobId: null, at: nowIso(), by, inputs, outputs });
+    if (wantsQuote) {
+      d.leads[`inst:${customerId}:${nowIso()}`] = "Open";
+      notify(d, "admin", "New AC installation enquiry", `${custName(d, customerId)} · ${title}. Call to confirm site visit & quotation.`);
+      notify(d, `customer:${customerId}`, "Installation enquiry received", "Our team will call you to confirm a site visit and send a quotation.");
+    }
+    audit(d, by, wantsQuote ? "Installation enquiry" : "Sizing estimate saved", `${custName(d, customerId)} · ${title}`);
+  });
+}
+
 export { JOB_FLOW };

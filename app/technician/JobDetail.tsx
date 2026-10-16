@@ -7,6 +7,7 @@ import {
   preWorkAnswered, preWorkTotal,
 } from "../components/service";
 import { TimerCard } from "./Timer";
+import { PipeCalcSheet } from "./PipeSheet";
 import { Avatar, BottomSheet, Chips, Footer, GhostButton, PageHeader, Pill, PrimaryButton, Tabs, card, field, label, sectionTitle, small } from "../components/ui";
 import {
   DEMO_OTP, ROOT_CAUSES, acLabel, acSummary, fmtDateTime, initials, inr, isoDay, jobTotals, recommend, relDay, stepOf,
@@ -19,7 +20,7 @@ import {
 const lid = () => `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 const mapsUrl = (gps: string, address: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(gps || address)}`;
 
-type Sheet = "decline" | "prework" | "add" | "addon" | "approve" | "pay" | "followup" | "invoice" | null;
+type Sheet = "decline" | "prework" | "add" | "addon" | "approve" | "pay" | "followup" | "invoice" | "pipe" | null;
 
 export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: Job; tech: Technician; onBack: () => void; flash: (m: string) => void }) {
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -118,7 +119,7 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h3 style={sectionTitle}>{job.invoice ? `Invoice ${job.invoice.no}` : job.quote && !editingEstimate ? `Quotation ${job.quote.no}` : "Estimate"}</h3>
-                {editingEstimate ? <button onClick={() => setSheet("add")} style={linkBtn}><PlusIcon s={14} c="var(--blue)" /> Add item</button> : <SecureBadge />}
+                {editingEstimate ? <span style={{ display: "flex", gap: 12 }}><button onClick={() => setSheet("pipe")} style={linkBtn}>📐 Pipe calc</button><button onClick={() => setSheet("add")} style={linkBtn}><PlusIcon s={14} c="var(--blue)" /> Add item</button></span> : <SecureBadge />}
               </div>
               <div style={{ ...card, padding: "4px 14px" }}><QuoteTable job={job} db={db} onRemove={editingEstimate ? removeLine : undefined} /></div>
               {editingEstimate && job.lines.length > 0 && (
@@ -213,7 +214,8 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
 
         {sheet === "decline" && <DeclineSheet onClose={() => setSheet(null)} onConfirm={(r) => { setSheet(null); declineJob(job.id, r); flash("Declined — sent back to coordinator"); onBack(); }} />}
         {sheet === "prework" && <PreWorkSheet initial={job.preWork} onClose={() => setSheet(null)} onSave={(p) => { updateJob(job.id, { preWork: p }); setSheet(null); flash("History saved"); }} />}
-        {sheet === "add" && <AddItemSheet db={db} tech={tech} onClose={() => setSheet(null)} onAdd={(l) => { addLines([l]); flash(`${l.name} added`); }} />}
+        {sheet === "pipe" && <PipeCalcSheet db={db} onClose={() => setSheet(null)} onAdd={(ls) => { addLines(ls); setSheet(null); flash("Copper pipe added to estimate"); }} />}
+      {sheet === "add" && <AddItemSheet db={db} tech={tech} onClose={() => setSheet(null)} onAdd={(l) => { addLines([l]); flash(`${l.name} added`); }} />}
         {sheet === "addon" && <AddItemSheet db={db} tech={tech} title="Additional work (needs approval)" onClose={() => setSheet(null)} onAdd={(l) => { setSheet(null); addOnWork(job.id, [l], by); flash("Revised quotation sent for approval"); }} />}
         {sheet === "approve" && <OtpApproveSheet phone={c.phone} total={t.total} onClose={() => setSheet(null)} onApproved={() => { setSheet(null); decideQuote(job.id, true, "OTP", c.name); flash("Approved by customer"); }} />}
         {sheet === "pay" && <CollectSheet due={t.due} onClose={() => setSheet(null)} onConfirm={(amt, m, ref) => { setSheet(null); recordPayment(job.id, amt, m, ref, by); flash(amt >= t.due ? "Paid in full · job closed" : `${inr(amt)} recorded · ${inr(t.due - amt)} due`); }} />}

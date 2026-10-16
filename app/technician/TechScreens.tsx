@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { MyFinance } from "./Timer";
+import { PipeCalcSheet } from "./PipeSheet";
 import { BrandMark, Wordmark } from "../components/Brand";
 import { AlertIcon, BellIcon, ChevronRight, ClockIcon, LogoutIcon, MinusIcon, PinIcon, PlusIcon, SearchIcon, StarIcon } from "../components/icons";
 import { AcHistory, AcSpecs, JobPill, PriorityPill, SecureScreen } from "../components/service";
@@ -240,12 +241,15 @@ export function SearchScreen({ db, tech, onOpenJob }: { db: Db; tech: Technician
 
 export function StockScreen({ db, tech, onRequest }: { db: Db; tech: Technician; onRequest: (items: Record<string, number>) => void }) {
   const [sheet, setSheet] = useState(false);
+  const [pipeCalc, setPipeCalc] = useState(false);
   const parts = db.parts.filter((p) => (tech.van[p.id] ?? 0) > 0);
   const used = db.jobs.filter((j) => j.techId === tech.id && isDone(j)).flatMap((j) => j.lines.filter((l) => l.kind === "Part"));
   return (
     <div>
       <PageHeader title="My van stock" right={<button onClick={() => setSheet(true)} style={{ background: "var(--blue)", color: "white", border: "none", borderRadius: 10, padding: "7px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Request stock</button>} />
       <div style={{ padding: "0 16px" }}>
+        <button onClick={() => setPipeCalc(true)} className="press" style={{ ...card, width: "100%", padding: 12, marginBottom: 12, border: "none", textAlign: "left", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>📐 Copper pipe calculator <span style={{ fontWeight: 500, color: "var(--ink-mute)", fontSize: 12 }}>· weight & customer price</span></button>
+        {pipeCalc && <PipeCalcSheet db={db} onClose={() => setPipeCalc(false)} />}
         <div style={{ ...card, padding: "2px 14px" }}>
           {parts.map((p, i) => {
             const n = tech.van[p.id] ?? 0;

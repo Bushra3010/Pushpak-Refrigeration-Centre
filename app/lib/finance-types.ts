@@ -143,6 +143,8 @@ export interface FinanceSettings {
   densitySource: string;
   copperRatePerKg: number;
   wastagePct: number;
+  /** markup the technician-app pipe calculator uses for customer prices (technicians never see cost or margin) */
+  pipeMarkupPct: number;
   tonnage: TonnageCoefficients;
   gauges: GaugeStandard[];
   /** technician ids allowed to see their own salary & payslips in the technician app */
@@ -160,6 +162,7 @@ export const DEFAULT_FINANCE_SETTINGS: FinanceSettings = {
   densitySource: DEFAULT_DENSITY_SOURCE,
   copperRatePerKg: 850,
   wastagePct: 5,
+  pipeMarkupPct: 25,
   tonnage: DEFAULT_TONNAGE_COEFFICIENTS,
   gauges: [
     {

@@ -266,11 +266,12 @@ export function CostRulesSection({ db, who, notify }: { db: Db; who: string; not
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{db.techs.map((x) => <label key={x.id} style={{ fontSize: 13, display: "flex", gap: 5 }}><input type="checkbox" checked={f.salaryVisibleTo.includes(x.id)} onChange={(e) => setF({ ...f, salaryVisibleTo: e.target.checked ? [...f.salaryVisibleTo, x.id] : f.salaryVisibleTo.filter((y) => y !== x.id) })} />{x.name}</label>)}</div>
           <p style={{ ...muted, margin: "10px 0 0" }}>Direct job petrol / travel / food go straight to their job and are always excluded from shared allocation. Approved payroll months keep their stored allocations.</p>
         </Panel>
-        <Panel title="Copper calculator defaults" actions={<Btn onClick={() => save({ copperDensity: f.copperDensity, densitySource: f.densitySource, copperRatePerKg: f.copperRatePerKg, wastagePct: f.wastagePct })}>Save</Btn>}>
+        <Panel title="Copper calculator defaults" actions={<Btn onClick={() => save({ copperDensity: f.copperDensity, densitySource: f.densitySource, copperRatePerKg: f.copperRatePerKg, wastagePct: f.wastagePct, pipeMarkupPct: f.pipeMarkupPct ?? 25 })}>Save</Btn>}>
           <div style={grid()}>
             <label><span style={fieldLabel}>Density kg/m³</span><input type="number" value={f.copperDensity} onChange={(e) => setF({ ...f, copperDensity: Number(e.target.value) })} style={input} /></label>
             <label><span style={fieldLabel}>Rate ₹/kg</span><input type="number" value={f.copperRatePerKg} onChange={(e) => setF({ ...f, copperRatePerKg: Number(e.target.value) })} style={input} /></label>
             <label><span style={fieldLabel}>Wastage %</span><input type="number" value={f.wastagePct} onChange={(e) => setF({ ...f, wastagePct: Number(e.target.value) })} style={input} /></label>
+            <label><span style={fieldLabel}>Technician-app markup %</span><input type="number" min={0} value={f.pipeMarkupPct ?? 25} onChange={(e) => setF({ ...f, pipeMarkupPct: Number(e.target.value) })} style={input} /></label>
           </div>
           <label style={{ display: "block", marginTop: 10 }}><span style={fieldLabel}>Density source (recorded)</span><textarea value={f.densitySource} onChange={(e) => setF({ ...f, densitySource: e.target.value })} style={{ ...input, minHeight: 70 }} /></label>
         </Panel>
