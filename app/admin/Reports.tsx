@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { REVENUE_HISTORY, fmtDate, inr, isDone, isoDay, jobTotals, type Db, type Job } from "../lib/data";
 import { Btn, Filter, Panel, Stat, Table, muted } from "./kit";
+import { FinanceReports } from "./FinanceReports";
 
 type Range = "7 days" | "30 days" | "All time";
 
@@ -109,6 +110,7 @@ export function ReportsSection({ db }: { db: Db }) {
         <Panel title="Top customer complaints"><Bars rows={complaints} /></Panel>
         <Panel title="Top root causes (diagnosis)"><Bars rows={causes} /></Panel>
       </div>
+      <FinanceReports db={db} />
       <Panel title="Technician performance" pad={false}>
         <Table rows={techRows} rowKey={(r) => r.t.id} cols={[
           { key: "n", head: "Technician", render: (r) => <b>{r.t.name}</b> },

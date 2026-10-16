@@ -11,6 +11,7 @@ import {
   addJobNote, assignJob, cancelJob, closeJob, createJob, decideQuote, recordPayment, refundPayment, rescheduleJob, setPriority,
 } from "../lib/store";
 import { Badge, Btn, Filter, Initials, Modal, Panel, SearchBox, Table, fieldLabel, input, muted } from "./kit";
+import { JobFinance } from "./JobFinance";
 
 export const custName = (db: Db, id: string) => db.customers.find((c) => c.id === id)?.name ?? id;
 export const techName = (db: Db, id: string | null) => (id ? db.techs.find((t) => t.id === id)?.name ?? id : "—");
@@ -136,7 +137,7 @@ export function rankTechs(db: Db, job: Job) {
 /* ───────────────────────── Job record ───────────────────────── */
 
 export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job; who: string; onClose: () => void; notify: (m: string) => void }) {
-  const [tab, setTab] = useState<"Overview" | "Diagnosis & quote" | "AC history" | "Timeline">("Overview");
+  const [tab, setTab] = useState<"Overview" | "Diagnosis & quote" | "AC history" | "Timeline" | "Team, time & profit">("Overview");
   const [modal, setModal] = useState<"cancel" | "reschedule" | "pay" | "refund" | null>(null);
   const [note, setNote] = useState("");
   const c = db.customers.find((x) => x.id === job.customerId)!;
@@ -167,7 +168,7 @@ export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job;
           </select>
         </span>
       </div>
-      <Filter options={["Overview", "Diagnosis & quote", "AC history", "Timeline"] as const} value={tab} onChange={setTab} />
+      <Filter options={["Overview", "Diagnosis & quote", "AC history", "Timeline", "Team, time & profit"] as const} value={tab} onChange={setTab} />
 
       {tab === "Overview" && (
         <div className="admin-grid-2" style={{ marginTop: 14 }}>
@@ -252,6 +253,7 @@ export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job;
       )}
 
       {tab === "Timeline" && <div style={{ marginTop: 14 }}><Timeline job={job} /></div>}
+      {tab === "Team, time & profit" && <JobFinance db={db} job={job} who={who} notify={notify} />}
 
       {modal === "cancel" && <CancelModal onClose={() => setModal(null)} onConfirm={(r) => { cancelJob(job.id, r, who); setModal(null); notify(`${job.id} cancelled`); }} />}
       {modal === "reschedule" && <RescheduleModal job={job} onClose={() => setModal(null)} onConfirm={(d, s, r) => { rescheduleJob(job.id, d, s, r, who); setModal(null); notify(`${job.id} rescheduled`); }} />}

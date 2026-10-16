@@ -11,11 +11,15 @@
 import { useSyncExternalStore } from "react";
 import {
   EMPTY_DIAGNOSIS, EMPTY_PREWORK, JOB_FLOW, acLabel, fmtDate, inr, isoDay, jobTotals, nowIso, seedDb, stepOf,
-  type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
+  isOpen, type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
   type PreWork, type QuoteLine, type Settings, type Technician,
 } from "./data";
+import { buildPayrollRun } from "./finance";
+import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
+import { upgradeDb, withFinanceSeed } from "./finance-seed";
 
 const KEY = "prc:db:v1";
+const fresh = () => withFinanceSeed(seedDb());
 
 let state: Db | null = null;
 const listeners = new Set<() => void>();
@@ -24,9 +28,13 @@ let serverSnap: Db | null = null;
 function load(): Db {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as Db;
+    if (raw) {
+      const db = upgradeDb(JSON.parse(raw) as Db);
+      try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* storage blocked */ }
+      return db;
+    }
   } catch { /* storage blocked or corrupt — fall back to seed */ }
-  return seedDb();
+  return fresh();
 }
 
 function persist() {
@@ -40,7 +48,7 @@ function subscribe(l: () => void) {
   // Another tab (e.g. admin) changed the data → pick it up here.
   const onStorage = (e: StorageEvent) => {
     if (e.key !== KEY) return;
-    state = e.newValue ? (JSON.parse(e.newValue) as Db) : seedDb();
+    state = e.newValue ? upgradeDb(JSON.parse(e.newValue) as Db) : fresh();
     emit();
   };
   window.addEventListener("storage", onStorage);
@@ -48,7 +56,7 @@ function subscribe(l: () => void) {
 }
 
 const getSnapshot = () => (state ??= load());
-const getServerSnapshot = () => (serverSnap ??= seedDb());
+const getServerSnapshot = () => (serverSnap ??= fresh());
 
 export function useDb(): Db {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -275,7 +283,9 @@ export function completeWork(jobId: string, by: string) {
     stamp(j, "Work Completed", by);
     // Parts leave the technician's van first, then the warehouse.
     const t = d.techs.find((x) => x.id === j.techId);
+    stopJobTimers(d, j.id, by);
     j.lines.filter((l) => l.kind === "Part" && l.refId).forEach((l) => {
+      l.unitCost = d.parts.find((x) => x.id === l.refId)?.cost; // material cost recognised at consumption
       let need = l.qty;
       if (t) { const inVan = t.van[l.refId!] ?? 0; const take = Math.min(inVan, need); t.van[l.refId!] = inVan - take; need -= take; }
       const p = d.parts.find((x) => x.id === l.refId);
@@ -451,9 +461,283 @@ export function markRead(to: string, id?: string) {
 }
 
 export function resetDemo() {
-  state = seedDb();
+  state = fresh();
   persist();
   emit();
+}
+
+/* ───────────────────────── Finance add-on ─────────────────────────
+ * Actions that can be refused return an error message (string) instead of
+ * throwing; null means done. Approved payroll months are locked. */
+
+type Err = string | null;
+
+/** Local ISO with seconds — timers need sub-minute precision. */
+const nowSec = () => { const d = new Date(); return `${nowIso()}:${String(d.getSeconds()).padStart(2, "0")}`; };
+const lockedMonth = (d: Db, iso: string) => d.payrollRuns.some((r) => r.month === iso.slice(0, 7) && r.status === "Approved");
+const lockMsg = (iso: string) => `Payroll for ${iso.slice(0, 7)} is approved — that month is locked.`;
+const onJob = (j: Job, techId: string) => j.techId === techId || (j.helpers ?? []).includes(techId);
+const overlapsAny = (d: Db, techId: string, start: string, end: string | null, ignore?: string) =>
+  d.timeLogs.some((l) => l.id !== ignore && l.techId === techId && l.status !== "Rejected" && l.start < (end ?? "9999") && start < (l.end ?? "9999"));
+
+function stopJobTimers(d: Db, jobId: string, by: string) {
+  d.timeLogs.forEach((l) => { if (l.jobId === jobId && l.status === "Running") { l.end = nowSec(); l.status = "Submitted"; l.note = `${l.note ?? ""} stopped by ${by}`.trim(); } });
+}
+
+export type TimerAction = "travel" | "work" | "pause" | "resume" | "stop";
+
+/** Technician timer. Server clock in the real app; one running segment per technician, never overlapping. */
+export function timerAction(techId: string, jobId: string | null, action: TimerAction, by: string): Err {
+  let err: Err = null;
+  mutate((d) => {
+    const now = nowSec();
+    if (lockedMonth(d, now)) { err = lockMsg(now); return; }
+    const running = d.timeLogs.find((l) => l.techId === techId && l.status === "Running");
+    if (action === "travel" || action === "work" || action === "resume") {
+      const j = jobId ? d.jobs.find((x) => x.id === jobId) : undefined;
+      if (!j || !onJob(j, techId)) { err = "You are not assigned to this job."; return; }
+      if (!isOpen(j)) { err = `Job is ${j.status} — timers run only on open jobs.`; return; }
+    } else if (!running) { err = "No timer is running."; return; }
+    if (action === "pause" && running?.kind === "Break") { err = "Already on a break."; return; }
+    if (running) { running.end = now; running.status = "Submitted"; }
+    if (action === "stop") return;
+    const kind = action === "travel" ? "Travel" : action === "pause" ? "Break" : "Work";
+    d.timeLogs.push({ id: `tl${uid()}`, techId, jobId: action === "pause" ? running!.jobId : jobId, kind, start: now, end: null, status: "Running" });
+    const j = d.jobs.find((x) => x.id === (action === "pause" ? running!.jobId : jobId));
+    if (j && action === "travel" && stepOf(j.status) < stepOf("On the Way")) stamp(j, "On the Way", by);
+    if (j && (action === "work" || action === "resume") && stepOf(j.status) < stepOf("Arrived")) { stamp(j, "Arrived", by, "Work timer started"); j.arrivedAt = nowIso(); }
+  });
+  return err;
+}
+
+export function reviewTime(ids: string[], approve: boolean, note: string, by: string): Err {
+  let err: Err = null;
+  if (!approve && !note.trim()) return "A reason is required to reject time.";
+  mutate((d) => {
+    const rows = d.timeLogs.filter((l) => ids.includes(l.id) && l.status === "Submitted");
+    const locked = rows.find((l) => lockedMonth(d, l.start));
+    if (locked) { err = lockMsg(locked.start); return; }
+    rows.forEach((l) => { l.status = approve ? "Approved" : "Rejected"; l.reviewedBy = by; if (note) l.note = `${l.note ?? ""} ${note}`.trim(); });
+    audit(d, by, approve ? "Time approved" : "Time rejected", `${rows.length} entr${rows.length === 1 ? "y" : "ies"}${note ? ` · ${note}` : ""}`);
+  });
+  return err;
+}
+
+export function requestCorrection(c: { logId: string | null; techId: string; jobId: string | null; kind: TimeLog["kind"]; start: string; end: string; reason: string }, by: string): Err {
+  if (c.reason.trim().length < 5) return "Give a reason (at least 5 characters).";
+  if (!(c.end > c.start)) return "End must be after start.";
+  let err: Err = null;
+  mutate((d) => {
+    if (lockedMonth(d, c.start)) { err = lockMsg(c.start); return; }
+    d.corrections.unshift({ ...c, id: `tc${uid()}`, status: "Pending", requestedBy: by, requestedAt: nowIso() });
+    notify(d, "admin", "Time correction requested", `${techName(d, c.techId)} · ${c.reason}`);
+    audit(d, by, "Time correction requested", `${techName(d, c.techId)} · ${c.start} → ${c.end} · ${c.reason}`);
+  });
+  return err;
+}
+
+export function reviewCorrection(id: string, approve: boolean, note: string, by: string): Err {
+  let err: Err = null;
+  mutate((d) => {
+    const c = d.corrections.find((x) => x.id === id && x.status === "Pending");
+    if (!c) { err = "Correction not found or already reviewed."; return; }
+    if (c.requestedBy === by) { err = "Someone other than the requester must review a correction."; return; }
+    if (lockedMonth(d, c.start)) { err = lockMsg(c.start); return; }
+    if (approve) {
+      if (overlapsAny(d, c.techId, c.start, c.end, c.logId ?? undefined)) { err = "The corrected time overlaps another entry for this technician."; return; }
+      const log = c.logId ? d.timeLogs.find((l) => l.id === c.logId) : undefined;
+      if (log) Object.assign(log, { start: c.start, end: c.end, kind: c.kind, status: "Approved", reviewedBy: by, note: `Corrected: ${c.reason}` });
+      else d.timeLogs.push({ id: `tl${uid()}`, techId: c.techId, jobId: c.jobId, kind: c.kind, start: c.start, end: c.end, status: "Approved", reviewedBy: by, note: `Added by correction: ${c.reason}` });
+    }
+    c.status = approve ? "Approved" : "Rejected"; c.reviewedBy = by; c.reviewNote = note;
+    audit(d, by, approve ? "Time correction approved" : "Time correction rejected", `${techName(d, c.techId)} · ${c.reason}${note ? ` · ${note}` : ""}`);
+  });
+  return err;
+}
+
+/** New effective-dated salary record; the previous open record ends the day before. */
+export function saveSalary(r: Omit<SalaryRecord, "id" | "to">, by: string): Err {
+  if (r.payType === "Monthly" ? !(r.monthly > 0) : !(r.hourly > 0)) return "Enter the monthly salary or hourly rate.";
+  if (!(r.hoursPerDay > 0) || !r.workingWeekdays.length) return "Set working days and scheduled hours.";
+  let err: Err = null;
+  mutate((d) => {
+    if (d.payrollRuns.some((x) => x.status === "Approved" && x.month >= r.from.slice(0, 7))) { err = "That date falls in an approved payroll month — choose a later effective date."; return; }
+    const prevDay = (() => { const x = new Date(`${r.from}T12:00`); x.setDate(x.getDate() - 1); return x.toISOString().slice(0, 10); })();
+    d.salaries.forEach((s) => { if (s.techId === r.techId && s.from < r.from && (!s.to || s.to >= r.from)) s.to = prevDay; });
+    d.salaries = d.salaries.filter((s) => !(s.techId === r.techId && s.from === r.from));
+    d.salaries.push({ ...r, id: `sal${uid()}`, to: null });
+    audit(d, by, "Salary record", `${techName(d, r.techId)} from ${fmtDate(r.from)} · ${r.payType === "Monthly" ? `${inr(r.monthly)}/month` : `${inr(r.hourly)}/hour`}`);
+  });
+  return err;
+}
+
+const lockedOr = (d: Db, iso: string, fn: () => void): Err => { if (lockedMonth(d, iso)) return lockMsg(iso); fn(); return null; };
+
+export function setAttendance(m: AttendanceMark, by: string): Err {
+  let err: Err = null;
+  mutate((d) => { err = lockedOr(d, m.date, () => { d.attendance = d.attendance.filter((a) => !(a.techId === m.techId && a.date === m.date)); d.attendance.push(m); audit(d, by, "Attendance", `${techName(d, m.techId)} ${fmtDate(m.date)} → ${m.status}`); }); });
+  return err;
+}
+export function addHoliday(h: Holiday, by: string): Err {
+  let err: Err = null;
+  mutate((d) => { err = lockedOr(d, h.date, () => { d.holidays = [...d.holidays.filter((x) => x.date !== h.date), h]; audit(d, by, "Holiday", `${fmtDate(h.date)} ${h.name}`); }); });
+  return err;
+}
+export function addAdvance(a: Omit<Advance, "id">, by: string): Err {
+  if (!(a.amount > 0) || !a.reason.trim()) return "Enter amount and reason.";
+  mutate((d) => { d.advances.push({ ...a, id: `adv${uid()}` }); audit(d, by, "Salary advance", `${techName(d, a.techId)} · ${inr(a.amount)} (recoverable, not an expense)`); });
+  return null;
+}
+export function addIncentive(i: Omit<Incentive, "id">, by: string): Err {
+  let err: Err = null;
+  if (!(i.amount > 0) || !i.reason.trim()) return "Enter amount and reason.";
+  mutate((d) => { err = lockedOr(d, `${i.month}-01`, () => { d.incentives.push({ ...i, id: `inc${uid()}` }); audit(d, by, "Incentive", `${techName(d, i.techId)} · ${inr(i.amount)} · ${i.reason}`); }); });
+  return err;
+}
+export function addDeduction(x: Omit<Deduction, "id">, by: string): Err {
+  let err: Err = null;
+  if (!(x.amount > 0) || !x.reason.trim()) return "Enter amount and reason.";
+  mutate((d) => { err = lockedOr(d, `${x.month}-01`, () => { d.deductions.push({ ...x, id: `ded${uid()}` }); audit(d, by, "Salary deduction", `${techName(d, x.techId)} · ${inr(x.amount)} · ${x.kind} · ${x.reason}`); }); });
+  return err;
+}
+
+export function addExpense(e: Omit<Expense, "id">, by: string): Err {
+  if (!(e.amount > 0)) return "Amount must be more than zero.";
+  if (e.cls === "Direct job" && !e.jobId) return "Direct job expenses must be linked to a job.";
+  if (e.cls === "Technician shared" && !e.techId) return "Technician shared costs need a technician.";
+  if (e.paidBy === "Employee" && !e.techId) return "Employee-paid claims need the employee.";
+  let err: Err = null;
+  mutate((d) => {
+    if (e.cls === "Technician shared" && e.status === "Approved" && lockedMonth(d, e.date)) { err = lockMsg(e.date); return; }
+    d.expenses.unshift({ ...e, id: `ex${uid()}` });
+    if (e.status === "Pending") notify(d, "admin", "Expense claim submitted", `${e.category} · ${inr(e.amount)} · ${e.jobId ?? "monthly"}`);
+    audit(d, by, "Expense recorded", `${e.category} · ${inr(e.amount)} · ${e.cls}${e.jobId ? ` · ${e.jobId}` : ""} · ${e.status}`);
+  });
+  return err;
+}
+
+export function reviewExpense(id: string, action: "approve" | "reject" | "reverse", note: string, by: string, patch: { cls?: Expense["cls"]; jobId?: string | null } = {}): Err {
+  let err: Err = null;
+  mutate((d) => {
+    const e = d.expenses.find((x) => x.id === id);
+    if (!e) { err = "Expense not found."; return; }
+    if (action !== "approve" && !note.trim()) { err = "A reason is required."; return; }
+    if (action === "reverse") {
+      if (e.status !== "Approved") { err = "Only approved expenses can be reversed."; return; }
+      if (e.reimbursed) { err = "Already reimbursed — recover it through a payroll deduction instead."; return; }
+    } else if (e.status !== "Pending") { err = `Expense is already ${e.status.toLowerCase()}.`; return; }
+    const cls = patch.cls ?? e.cls;
+    if (cls === "Technician shared" && lockedMonth(d, e.date)) { err = lockMsg(e.date); return; }
+    if (action === "approve") { e.cls = cls; if (patch.jobId !== undefined) e.jobId = patch.jobId; if (e.cls === "Direct job" && !e.jobId) { err = "Pick the job for a direct job expense."; return; } }
+    e.status = action === "approve" ? "Approved" : action === "reject" ? "Rejected" : "Reversed";
+    e.reviewNote = note;
+    audit(d, by, `Expense ${e.status.toLowerCase()}`, `${e.category} · ${inr(e.amount)}${note ? ` · ${note}` : ""}`);
+  });
+  return err;
+}
+
+export function reimburseExpense(id: string, ref: string, by: string): Err {
+  let err: Err = null;
+  mutate((d) => {
+    const e = d.expenses.find((x) => x.id === id);
+    if (!e || e.paidBy !== "Employee" || e.status !== "Approved") { err = "Only approved employee-paid claims can be reimbursed."; return; }
+    if (e.reimbursed) { err = "This claim was already reimbursed."; return; }
+    e.reimbursed = { how: "Direct", ref, at: nowIso() };
+    audit(d, by, "Claim reimbursed", `${e.category} · ${inr(e.amount)} · ${ref} (settlement, not a new expense)`);
+  });
+  return err;
+}
+
+export function savePayroll(month: string, by: string): Err {
+  let err: Err = null;
+  mutate((d) => {
+    if (d.payrollRuns.some((r) => r.month === month && r.status === "Approved")) { err = lockMsg(`${month}-01`); return; }
+    const run = buildPayrollRun(d, month);
+    if (!run.lines.length) { err = "No technician has a salary record for this month."; return; }
+    d.payrollRuns = [...d.payrollRuns.filter((r) => r.month !== month), run];
+    audit(d, by, "Payroll saved (draft)", `${month} · employer cost ${inr(run.totals.employerCost)}`);
+  });
+  return err;
+}
+
+export function approvePayroll(month: string, by: string): Err {
+  let err: Err = null;
+  mutate((d) => {
+    const run = d.payrollRuns.find((r) => r.month === month);
+    if (!run || run.status !== "Draft") { err = "Save the draft payroll first."; return; }
+    const pending = d.timeLogs.filter((l) => l.start.startsWith(month) && (l.status === "Running" || l.status === "Submitted")).length;
+    if (pending) { err = `Approve or reject ${pending} running/submitted time entr${pending === 1 ? "y" : "ies"} in ${month} first.`; return; }
+    const fresh = buildPayrollRun(d, month); // recompute so the locked figures match today's data
+    for (const l of fresh.lines.filter((x) => x.type === "reimbursement")) {
+      const e = d.expenses.find((x) => x.id === l.ref);
+      if (e?.reimbursed) { err = `Claim ${e.category} ${inr(e.amount)} was already reimbursed.`; return; }
+    }
+    Object.assign(run, fresh, { status: "Approved", approvedAt: nowIso(), approvedBy: by });
+    for (const l of run.lines.filter((x) => x.type === "reimbursement")) {
+      const e = d.expenses.find((x) => x.id === l.ref);
+      if (e) e.reimbursed = { how: "Payroll", ref: `Payroll ${month}`, at: nowIso() };
+    }
+    audit(d, by, "Payroll approved", `${month} · net pay ${inr(run.totals.netPay)} · locked`);
+  });
+  return err;
+}
+
+export function setJobTeam(jobId: string, helpers: string[], by: string) {
+  mutate((d) => {
+    const j = findJob(d, jobId);
+    j.helpers = helpers.filter((h) => h !== j.techId);
+    if (j.splitApprovedBy) { j.split = undefined; j.splitApprovedBy = undefined; }
+    j.helpers.forEach((h) => notify(d, `tech:${h}`, "Added to a job", `${j.id} · ${custName(d, j.customerId)}`, j.id));
+    audit(d, by, "Job team", `${j.id} helpers: ${j.helpers.map((h) => techName(d, h)).join(", ") || "none"}`);
+  });
+}
+
+/** Manual revenue split (must total exactly 100%) or null to split by approved hours. */
+export function setJobSplit(jobId: string, split: Record<string, number> | null, by: string): Err {
+  if (split && Math.abs(Object.values(split).reduce((a, b) => a + b, 0) - 100) > 0.001) return "Shares must total exactly 100%.";
+  mutate((d) => {
+    const j = findJob(d, jobId);
+    j.split = split ?? undefined;
+    j.splitApprovedBy = split ? by : undefined;
+    audit(d, by, "Revenue split", `${j.id} → ${split ? Object.entries(split).map(([t, p]) => `${techName(d, t)} ${p}%`).join(", ") : "by approved hours"}`);
+  });
+  return null;
+}
+
+export function logCallback(parentId: string, date: string, slot: string, note: string, by: string): string {
+  let id = "";
+  mutate((d) => {
+    const p = findJob(d, parentId);
+    id = `J-${++d.seq}`;
+    d.jobs.unshift({
+      ...structuredClone(p), id, status: "New Request", techId: null, helpers: [], split: undefined, splitApprovedBy: undefined, parentJobId: p.id,
+      createdAt: nowIso(), date, slot, complaint: { ...p.complaint, notes: `Callback for ${p.id}: ${note}` }, customerVerified: false, arrivedAt: undefined,
+      diagnosis: { ...EMPTY_DIAGNOSIS }, lines: [], discount: 0, quote: null, work: { serviceType: "", before: "", after: "", remarks: "" }, invoice: null,
+      payments: [], followUp: null, rating: undefined, notes: [], timeline: [{ status: "New Request", at: nowIso(), by, note: `Callback for ${p.id}` }], cancelReason: undefined,
+    });
+    notify(d, "admin", "Callback logged", `${id} for ${p.id} · ${custName(d, p.customerId)}`, id);
+    audit(d, by, "Callback logged", `${id} ← ${p.id} · ${note}`);
+  });
+  return id;
+}
+
+export function updateFin(patch: Partial<FinanceSettings>, by: string) {
+  mutate((d) => { Object.assign(d.fin, patch); audit(d, by, "Cost rules changed", Object.keys(patch).join(", ")); });
+}
+
+/** Saves a calculator result; optional lines go onto the job's estimate (never touches stock). */
+export function saveCalc(c: Omit<SavedCalc, "id" | "at">, lines: QuoteLine[] | null): Err {
+  let err: Err = null;
+  mutate((d) => {
+    if (c.jobId && lines?.length) {
+      const j = findJob(d, c.jobId);
+      if (stepOf(j.status) >= stepOf("Approved") || j.status === "Cancelled") { err = `${j.id} is ${j.status} — add calculator lines before the estimate is approved.`; return; }
+      j.lines.push(...lines);
+    }
+    d.calcs.unshift({ ...c, id: `calc${uid()}`, at: nowIso() });
+    audit(d, c.by, "Calculation saved", `${c.kind} · ${c.title}${c.jobId ? ` → ${c.jobId}` : ""}`);
+  });
+  return err;
 }
 
 export { JOB_FLOW };

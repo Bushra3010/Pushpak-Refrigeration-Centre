@@ -6,6 +6,7 @@ import {
   AcHistory, AcSpecs, ComplaintBox, InvoiceDoc, JobPill, PreWorkForm, PreWorkView, PriorityPill, QuoteTable, SecureBadge, SecureScreen, Timeline,
   preWorkAnswered, preWorkTotal,
 } from "../components/service";
+import { TimerCard } from "./Timer";
 import { Avatar, BottomSheet, Chips, Footer, GhostButton, PageHeader, Pill, PrimaryButton, Tabs, card, field, label, sectionTitle, small } from "../components/ui";
 import {
   DEMO_OTP, ROOT_CAUSES, acLabel, acSummary, fmtDateTime, initials, inr, isoDay, jobTotals, recommend, relDay, stepOf,
@@ -47,6 +48,8 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
       <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
         <PageHeader title={`Job ${job.id}`} sub={`${relDay(job.date)}, ${job.slot}`} onBack={onBack} right={<JobPill status={job.status} />} />
         <div style={{ padding: "0 16px 12px", flex: 1 }}>
+
+          <TimerCard db={db} job={job} tech={tech} flash={flash} />
 
           {/* Customer */}
           <div style={{ ...card, padding: 14 }}>
