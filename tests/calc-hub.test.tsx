@@ -18,10 +18,10 @@ afterEach(cleanup);
 const FORBIDDEN = /markup|margin|profit|purchase cost|unit cost|copper rate per kg|₹\s?850\b/i;
 
 describe("hub", () => {
-  it("shows all 24 calculators by default, grouped, each with an Open button", () => {
+  it("shows all 25 calculators by default, grouped, each with an Open button", () => {
     render(<CalculatorsHub db={db()} tech={tech("t1")} tool={null} onOpen={noop} flash={noop} />);
-    expect(TOOLS).toHaveLength(24);
-    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(24);
+    expect(TOOLS).toHaveLength(25);
+    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(25);
     for (const c of ["Installation & Quotation", "Service & Diagnostics", "Energy & Customer Planning", "Daily Work & Billing"]) expect(screen.getAllByText(c).length).toBeGreaterThan(0);
   });
   it("search by name or purpose, and category filter", () => {
@@ -39,7 +39,7 @@ describe("hub", () => {
     expect(db().techPrefs!.t1.fav).toEqual(["drain-pipe"]);
     rerender(<CalculatorsHub db={db()} tech={tech("t1")} tool={null} onOpen={noop} flash={noop} />);
     expect(screen.getByText("★ Favourites")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(24);
+    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(25);
     expect(db().techPrefs!.t2).toBeUndefined();
   });
   it("routes: #calculators and #calculators/<id>; opening records recently used", () => {

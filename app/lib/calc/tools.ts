@@ -186,6 +186,26 @@ export function refrigerantUsage(beforeKg: number, afterKg: number, ratePerKg: n
   return { usedKg, usedG: usedKg * 1000, charge: round2(usedKg * ratePerKg) };
 }
 
+/* ───────────── 25 gas weight ↔ price ───────────── */
+
+/**
+ * Loose gas sold by weight. "weight": grams → price. "price": customer budget (₹, GST-inclusive when
+ * gstPct > 0) → grams to give. Base and GST are rounded to paise; grams stay full precision.
+ */
+export function gasWeightPrice(mode: "weight" | "price", ratePerKg: number, value: number, gstPct: number) {
+  need(pos(ratePerKg), "Enter the gas selling rate per kg.");
+  need(nonNeg(gstPct), "GST % cannot be negative.");
+  if (mode === "weight") {
+    need(pos(value), "Enter the gas weight in grams.");
+    const base = round2((value / 1000) * ratePerKg);
+    const gst = round2((base * gstPct) / 100);
+    return { grams: value, base, gst, total: round2(base + gst) };
+  }
+  need(pos(value), "Enter the customer's budget in ₹.");
+  const base = round2(value / (1 + gstPct / 100));
+  return { grams: (base / ratePerKg) * 1000, base, gst: round2(value - base), total: value };
+}
+
 /* ───────────── pressure units ───────────── */
 
 export const ATM_KPA = 101.325;

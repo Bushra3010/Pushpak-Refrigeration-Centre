@@ -9,7 +9,7 @@ import type { ToolDef } from "./registry";
 
 /* Shared calculator experience: labelled inputs, Calculate / Reset, result summary, breakdown,
  * assumptions, Save with customer & job, history, print and share. Calculators only describe their
- * inputs and a pure compute(); this shell does the rest identically for all 24. */
+ * inputs and a pure compute(); this shell does the rest identically for all of them. */
 
 export type Ctx = { db: Db; tech: Technician; def: ToolDef; flash: (m: string) => void; onBack: () => void };
 

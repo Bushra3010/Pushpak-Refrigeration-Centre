@@ -29,6 +29,7 @@ Each calculator has its own link: `/technician#calculators/<id>`.
 | 22 | Travel / Petrol Claim | `travel-claim` | Create Claim (Pending) |
 | 23 | Material Requirement | `material-requirement` | Request stock / request return |
 | 24 | Customer Bill | `customer-bill` | Save (never changes the invoice) |
+| 25 | Gas Weight & Price | `gas-weight-price` | Add to Estimate |
 
 ## Rules
 
@@ -40,7 +41,7 @@ Each calculator has its own link: `/technician#calculators/<id>`.
 * Add to Estimate: appended while the job is before/at Diagnosis; once the estimate is approved it goes in as
   add-on work needing the customer's re-approval. Never moves stock or edits an invoice.
 * Technicians see customer rates only. Purchase cost, markup, margin, profit and hidden salary never reach these
-  screens, saved summaries or printouts (enforced by a test across all 24). In demo mode this is a browser-side
+  screens, saved summaries or printouts (enforced by a test across all of them). In demo mode this is a browser-side
   simulation, not production-grade data security.
 * Settings live in `db.fin.tools` (`app/lib/tool-settings.ts`), edited in Admin → Cost & Calc Rules.
   Saved data is migrated by `upgradeDb` (`DB_VERSION = 2`), which keeps existing data and settings.

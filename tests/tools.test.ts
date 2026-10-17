@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ATM_KPA, airDeltaT, airflow, cableAssessment, convert, customerBill, drainPipe, electricityCost, extraMaterial, insulation, materialRequirement,
-  ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, replacementSavings, standCheck, summariseIntervals, superheatSubcool, toAbsKpa, travelClaim,
+  gasWeightPrice, ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, replacementSavings, standCheck, summariseIntervals, superheatSubcool, toAbsKpa, travelClaim,
   type ChargeRule,
 } from "@/app/lib/calc/tools";
 import { calculatePipe } from "@/app/lib/calc/pipe";
@@ -130,6 +130,16 @@ describe("refrigerant charge follows the manufacturer rule only", () => {
   it("usage: flags ending weight above starting weight", () => {
     expect(refrigerantUsage(12.4, 11.6, 1800)).toMatchObject({ usedG: expect.closeTo(800, 6), charge: 1440 });
     expect(() => refrigerantUsage(11, 11.5, 1800)).toThrow(/greater than the starting/);
+  });
+  it("gas weight ↔ price at ₹1,200/kg", () => {
+    expect(gasWeightPrice("weight", 1200, 650, 0)).toEqual({ grams: 650, base: 780, gst: 0, total: 780 });
+    expect(gasWeightPrice("price", 1200, 500, 0).grams).toBeCloseTo(416.67, 2);
+    expect(gasWeightPrice("weight", 1200, 650, 18)).toEqual({ grams: 650, base: 780, gst: 140.4, total: 920.4 });
+    const b = gasWeightPrice("price", 1200, 500, 18);
+    expect(b).toMatchObject({ base: 423.73, gst: 76.27, total: 500 });
+    expect(b.grams).toBeCloseTo(353.11, 2);
+    expect(() => gasWeightPrice("weight", 0, 650, 0)).toThrow(/rate/);
+    expect(() => gasWeightPrice("price", 1200, NaN, 0)).toThrow(/budget/);
   });
 });
 

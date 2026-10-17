@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ATM_KPA, ToolError, airDeltaT, airflow, fromKpa, ptDatasetFor, ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, superheatSubcool, toAbsKpa,
+  ATM_KPA, ToolError, airDeltaT, airflow, fromKpa, gasWeightPrice, ptDatasetFor, ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, superheatSubcool, toAbsKpa,
   type ChargeRule, type PUnit, type QLine,
 } from "../../lib/calc/tools";
 import { REFRIGERANTS } from "../../lib/tool-settings";
@@ -78,6 +78,50 @@ export function RefrigerantUsage({ ctx }: { ctx: Ctx }) {
     <Sel l="Refrigerant (approved rate)" value={v.rateId} onChange={(x) => set({ rateId: x })} options={gasRates.map((r) => [r.id, `${r.refrigerant} · ${rs(r.price)}/kg`] as [string, string])} />
     <Seg l="Scale units" value={v.unit} onChange={(x) => set({ unit: x })} options={["kg", "g"] as const} />
     <Two><F l="Cylinder before" unit={v.unit} value={v.before} onChange={(x) => set({ before: x })} /><F l="Cylinder after" unit={v.unit} value={v.after} onChange={(x) => set({ after: x })} /></Two>
+  </Box>} />;
+}
+
+/* ───────────── 25 Gas weight ↔ price ───────────── */
+
+export function GasWeightPrice({ ctx }: { ctx: Ctx }) {
+  const { db } = ctx;
+  const gasRates = db.fin.tools.rates.filter((r) => r.refrigerant);
+  const gstRate = db.settings.gstPercent || 18;
+  const MODES = ["Weight → Price", "Price → Weight"] as const;
+  const GST = ["Rate is final", `Add ${gstRate}% GST`] as const;
+  const init = { rateId: gasRates[0]?.id ?? "", rate: gasRates[0] ? String(gasRates[0].price) : "", mode: MODES[0] as (typeof MODES)[number], value: "", gst: GST[0] as string };
+  const calc = useCalc(init, (v): Result => {
+    const byWeight = v.mode === MODES[0];
+    const pct = v.gst === GST[0] ? 0 : gstRate;
+    const rate = num(v.rate);
+    const r = gasWeightPrice(byWeight ? "weight" : "price", rate, num(v.value), pct);
+    const gas = rateOf(db, v.rateId)?.refrigerant ?? "Refrigerant";
+    return {
+      summary: [
+        byWeight ? { k: "Total selling price", v: rs(r.total), strong: true } : { k: "Gas quantity to give", v: `${fmt(r.grams, 2)} g`, strong: true },
+        { k: "Gas weight", v: `${fmt(r.grams, 2)} g` },
+        { k: "Base gas amount", v: rs(r.base) },
+        { k: pct ? `GST ${pct}%` : "GST", v: rs(r.gst) },
+        { k: "Customer pays", v: rs(r.total), strong: true },
+      ],
+      breakdown: byWeight
+        ? [`Base = ${fmt(r.grams, 2)} g ÷ 1,000 × ${rs(rate)}/kg = ${rs(r.base)}`, ...(pct ? [`GST = ${rs(r.base)} × ${pct}% = ${rs(r.gst)}`] : [])]
+        : [...(pct ? [`Base = ${rs(r.total)} ÷ ${1 + pct / 100} = ${rs(r.base)}`] : []), `Weight = ${rs(r.base)} ÷ ${rs(rate)}/kg × 1,000 = ${fmt(r.grams, 2)} g`],
+      assumptions: ["Weigh the gas on a calibrated scale; hose losses are not included.", ...(byWeight ? [] : ["Budget is what the customer pays, GST included."])],
+      lines: [{ id: lineId(), kind: "Material", name: `${gas} gas · ${fmt(r.grams, 0)} g`, qty: 1, price: r.base }],
+      outputs: r,
+    };
+  });
+  const { v, set } = calc;
+  const pickRate = (id: string) => { const r = rateOf(db, id); set({ rateId: id, ...(r ? { rate: String(r.price) } : {}) }); };
+  return <CalcShell ctx={ctx} calc={calc} onDemo={() => calc.load({ ...init, rate: "1200", value: "650" })} form={<Box>
+    {gasRates.length > 0 && <Sel l="Refrigerant" value={v.rateId} onChange={pickRate} options={gasRates.map((r) => [r.id, `${r.refrigerant} · ${rs(r.price)}/kg`] as [string, string])} />}
+    <F l="Gas selling rate" unit="₹/kg" value={v.rate} onChange={(x) => set({ rate: x })} />
+    <Seg l="Calculate" value={v.mode} onChange={(x) => set({ mode: x, value: "" })} options={MODES} />
+    {v.mode === MODES[0]
+      ? <F l="Customer required weight" unit="grams" value={v.value} onChange={(x) => set({ value: x })} />
+      : <F l="Customer budget" unit="₹" value={v.value} onChange={(x) => set({ value: x })} />}
+    <Seg l="GST" value={v.gst} onChange={(x) => set({ gst: x })} options={GST} />
   </Box>} />;
 }
 

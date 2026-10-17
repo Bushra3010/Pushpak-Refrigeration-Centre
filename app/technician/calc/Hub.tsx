@@ -8,7 +8,7 @@ import { toggleFavourite, touchRecent } from "../../lib/store";
 import { CATEGORIES, TOOLS, searchTools, toolById, type Category, type ToolDef } from "./registry";
 import type { Ctx } from "./kit";
 import { CableElectrical, CopperPipe, DrainPipe, ExtraMaterial, InstallationEstimate, Insulation, StandAccessories, Tonnage } from "./install";
-import { AirDeltaT, Airflow, PressureTemperature, RefrigerantCharge, RefrigerantUsage, RepairEstimate, SuperheatSubcool } from "./service";
+import { AirDeltaT, Airflow, GasWeightPrice, PressureTemperature, RefrigerantCharge, RefrigerantUsage, RepairEstimate, SuperheatSubcool } from "./service";
 import { AmcPlan, ElectricityCost, ReplacementSavings, UnitConverter } from "./energy";
 import { CustomerBill, MaterialRequirement, OvertimeEstimate, TravelClaim, WorkHours } from "./daily";
 
@@ -21,6 +21,7 @@ const SCREENS: Record<string, (p: { ctx: Ctx }) => React.ReactElement> = {
   "superheat-subcooling": SuperheatSubcool, "air-delta-t": AirDeltaT, airflow: Airflow, "repair-estimate": RepairEstimate,
   "electricity-cost": ElectricityCost, "replacement-savings": ReplacementSavings, "amc-plan": AmcPlan, "unit-converter": UnitConverter,
   "work-hours": WorkHours, overtime: OvertimeEstimate, "travel-claim": TravelClaim, "material-requirement": MaterialRequirement, "customer-bill": CustomerBill,
+  "gas-weight-price": GasWeightPrice,
 };
 
 export const CALC_ROUTE = "#calculators";

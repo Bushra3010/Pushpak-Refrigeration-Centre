@@ -40,7 +40,7 @@ allowances, room/food, petrol/travel and overhead — reconciled to company prof
 | Technician app | Job timer (travel / work / break / resume / stop — never overlapping), expense claims, my hours & corrections, my payslips (if allowed), copper pipe calculator (estimate → "📐 Pipe calc", and Stock tab) showing weight & customer price only. |
 | Customer app | Home → "Buying a new AC? Find the right size" — tonnage estimate with recommended size and an installation-quote request that notifies the office. |
 
-| Technician app → **Calculators** tab | 24 calculators (`/technician#calculators`, each at `/technician#calculators/<id>`): search, category filters, favourites, recently used, saved history, print/share. Rates, packages, AMC plans, travel policy and reference data are set in Admin → Cost & Calc Rules → *Technician calculators*. See [`docs/CALCULATORS.md`](docs/CALCULATORS.md). |
+| Technician app → **Calculators** tab | 25 calculators (`/technician#calculators`, each at `/technician#calculators/<id>`): search, category filters, favourites, recently used, saved history, print/share. Rates, packages, AMC plans, travel policy and reference data are set in Admin → Cost & Calc Rules → *Technician calculators*. See [`docs/CALCULATORS.md`](docs/CALCULATORS.md). |
 
 Older saved demo data is upgraded automatically (Settings → Reset demo restores the full sample).
 In this demo the role picker and data live in the browser; real authentication, database storage and
