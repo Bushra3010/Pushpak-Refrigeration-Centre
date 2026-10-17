@@ -245,7 +245,10 @@ function AdminLogin({ onDone }: { onDone: () => void }) {
           width: "100%", marginTop: 18, border: "none", borderRadius: 12, padding: 12, fontSize: 14.5, fontWeight: 700, cursor: email && pw ? "pointer" : "not-allowed",
           background: email && pw ? "var(--blue)" : "var(--line-strong)", color: email && pw ? "white" : "var(--ink-mute)",
         }}>Sign in</button>
-        <p style={{ margin: "14px 0 0", padding: "10px 12px", borderRadius: 10, background: "var(--gold-tint)", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+        <button type="button" onClick={() => { setEmail(ADMIN_DEMO.email); setPw(ADMIN_DEMO.password); onDone(); }} className="press" style={{
+          width: "100%", marginTop: 10, border: "1.5px solid var(--gold)", borderRadius: 12, padding: 11, fontSize: 14, fontWeight: 700, cursor: "pointer", background: "var(--gold-tint)", color: "var(--gold-dark)",
+        }}>Use demo login</button>
+        <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--ink-mute)", lineHeight: 1.6, textAlign: "center" }}>
           Demo login: <b>{ADMIN_DEMO.email}</b> / <b>{ADMIN_DEMO.password}</b>
         </p>
       </form>
