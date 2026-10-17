@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { acLabel, acSummary, daysBetween, fmtDate, inr, isDone, isoDay, today, type Db, type LeadStatus } from "../lib/data";
-import { sellAmc, sendReminder, setLead } from "../lib/store";
+import { acLabel, acSummary, daysBetween, fmtDate, fmtDateTime, inr, isDone, isoDay, today, type Db, type LeadStatus } from "../lib/data";
+import { sellAmc, sendReminder, setAcQuoteStatus, setLead } from "../lib/store";
 import { NewJobModal, custName } from "./Jobs";
 import { Badge, Btn, Filter, Modal, Panel, Stat, Table, muted } from "./kit";
 
-type View = "AMC opportunities" | "AMC renewals" | "Service reminders" | "Replacement leads" | "Follow-ups" | "Upsell";
+type View = "New AC quotes" | "AMC opportunities" | "AMC renewals" | "Service reminders" | "Replacement leads" | "Follow-ups" | "Upsell";
 const LEAD_TONE: Record<LeadStatus, "blue" | "amber" | "green" | "grey"> = { Open: "blue", Contacted: "amber", Converted: "green", Dismissed: "grey" };
 
 export function GrowthSection({ db, who, notify, openJob }: { db: Db; who: string; notify: (m: string) => void; openJob: (id: string) => void }) {
-  const [view, setView] = useState<View>("AMC opportunities");
+  const quotes = db.acQuotes ?? [];
+  const openQuotes = quotes.filter((q) => q.status === "Open" || q.status === "Contacted");
+  const [view, setView] = useState<View>(openQuotes.length ? "New AC quotes" : "AMC opportunities");
   const [amcFor, setAmcFor] = useState<string | null>(null);
   const [bookFor, setBookFor] = useState<string | null>(null);
   const live = db.customers.filter((c) => !c.mergedInto);
@@ -34,8 +36,8 @@ export function GrowthSection({ db, who, notify, openJob }: { db: Db; who: strin
   const upsellRev = upsellLines.reduce((s, l) => s + l.qty * l.price, 0);
   const amcValue = amcOpps.reduce((s, c) => s + acsOf(c.id).length * db.settings.amcBasic, 0);
 
-  const views: View[] = ["AMC opportunities", "AMC renewals", "Service reminders", "Replacement leads", "Follow-ups", "Upsell"];
-  const counts: Partial<Record<View, number>> = { "AMC opportunities": amcOpps.length, "AMC renewals": renewals.length, "Service reminders": due.length, "Replacement leads": replace.length, "Follow-ups": follow.length, Upsell: upsellLines.length };
+  const views: View[] = ["New AC quotes", "AMC opportunities", "AMC renewals", "Service reminders", "Replacement leads", "Follow-ups", "Upsell"];
+  const counts: Partial<Record<View, number>> = { "New AC quotes": openQuotes.length, "AMC opportunities": amcOpps.length, "AMC renewals": renewals.length, "Service reminders": due.length, "Replacement leads": replace.length, "Follow-ups": follow.length, Upsell: upsellLines.length };
 
   return (
     <>
@@ -47,6 +49,21 @@ export function GrowthSection({ db, who, notify, openJob }: { db: Db; who: strin
       </div>
       <Panel title="Revenue opportunities" pad={false}>
         <div style={{ padding: "12px 16px" }}><Filter<View> options={views} value={view} onChange={setView} counts={counts} /></div>
+
+        {view === "New AC quotes" && (
+          <Table rows={quotes} rowKey={(q) => q.id} empty="No AC quote requests yet — they come from Find My AC Size in the customer app." cols={[
+            { key: "d", head: "Received", render: (q) => <>{fmtDateTime(q.at)}<div style={muted}>{q.timeline}</div></> },
+            { key: "c", head: "Customer", render: (q) => <><b>{q.contact.name}</b><div style={muted}>+91 {q.contact.phone}</div><div style={muted}>{q.contact.address}</div></> },
+            { key: "w", head: "Wants", render: (q) => <><b>{q.quantity} × {q.acType} · {q.capacityTons != null ? `${q.capacityTons} TR` : "size to suggest"}</b>
+              <div style={muted}>{q.starRating} · {q.inverter} · {q.withInstallation ? "with installation" : "unit price only"}</div>
+              <div style={muted}>{q.brands.join(", ")}</div>{q.notes && <div style={{ fontSize: 12, marginTop: 2 }}>“{q.notes}”</div>}</> },
+            { key: "s", head: "Room estimate", render: (q) => <span style={{ fontSize: 12 }}>{q.sizing || "—"}{q.recommendedTons != null && q.capacityTons != null && q.capacityTons < q.recommendedTons && <div><Badge tone="amber">Below estimate</Badge></div>}</span> },
+            { key: "l", head: "Lead", render: (q) => <Badge tone={LEAD_TONE[q.status]}>{q.status}</Badge> },
+            { key: "x", head: "", align: "right", render: (q) => <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+              {(["Contacted", "Converted", "Dismissed"] as const).filter((s) => s !== q.status).map((s) => <Btn key={s} small kind={s === "Converted" ? "gold" : "ghost"} onClick={() => { setAcQuoteStatus(q.id, s, who); notify(`Quote → ${s}`); }}>{s}</Btn>)}
+            </div> },
+          ]} />
+        )}
 
         {view === "AMC opportunities" && (
           <Table rows={amcOpps} rowKey={(c) => c.id} empty="No AMC opportunities right now." cols={[

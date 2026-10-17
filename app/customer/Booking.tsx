@@ -9,12 +9,13 @@ import {
   type ComplaintIssue, type Customer, type Db, type PreWork,
 } from "../lib/data";
 import type { NewJob } from "../lib/store";
+import { NewAcBanner } from "./Sizing";
 
 const STEPS = ["Select AC", "Problem", "History", "Schedule"];
 
 /** Book service: AC → complaint in the customer's words → previous history → date & slot. */
-export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit }: {
-  db: Db; me: Customer; initialAc?: string; onBack: () => void; onAddAc: () => void; onSubmit: (j: NewJob) => void;
+export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSizing }: {
+  db: Db; me: Customer; initialAc?: string; onBack: () => void; onAddAc: () => void; onSubmit: (j: NewJob) => void; onSizing?: () => void;
 }) {
   const acs = db.acs.filter((a) => a.customerId === me.id);
   const [step, setStep] = useState(initialAc ? 1 : 0);
@@ -66,6 +67,7 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit }: {
                 <PlusIcon s={16} c="var(--blue)" /> Add another AC
               </button>
             </div>
+            {onSizing && <NewAcBanner onOpen={onSizing} />}
           </>
         )}
 

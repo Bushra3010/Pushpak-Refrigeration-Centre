@@ -262,6 +262,26 @@ export interface Settings {
   approvalMode: "Customer App or OTP" | "OTP only";
 }
 
+/** New-AC purchase enquiry from the customer app, usually right after the tonnage estimate. */
+export interface AcQuoteRequest {
+  id: string;
+  at: string;
+  customerId: string;
+  acType: string;
+  brands: string[];
+  capacityTons: number | null; // null = "help me choose"
+  recommendedTons: number | null;
+  starRating: string;
+  inverter: string;
+  quantity: number;
+  withInstallation: boolean;
+  timeline: string;
+  contact: { name: string; phone: string; address: string };
+  notes: string;
+  sizing: string; // one-line summary of the room estimate
+  status: LeadStatus;
+}
+
 export interface Db {
   seq: number;
   customers: Customer[];
@@ -287,6 +307,8 @@ export interface Db {
   payrollRuns: PayrollRun[];
   calcs: SavedCalc[];
   fin: FinanceSettings;
+  /** customer "Get Best AC Quote" requests for a new AC (newest first) */
+  acQuotes?: AcQuoteRequest[];
   /** technician Calculators hub: favourites & recently used, per technician */
   techPrefs?: Record<string, { fav: string[]; recent: string[] }>;
   /** saved-data schema version (see upgradeDb) */

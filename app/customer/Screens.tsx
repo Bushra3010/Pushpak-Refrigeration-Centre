@@ -12,6 +12,7 @@ import {
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
+import { NewAcBanner } from "./Sizing";
 
 const myJobs = (db: Db, me: Customer) => db.jobs.filter((j) => j.customerId === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 const serviceDue = (db: Db, ac: AcUnit) => { const s = acSummary(db, ac.id); return !s.lastService || daysBetween(s.lastService, today()) >= db.settings.reminderDays; };
@@ -59,16 +60,7 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
           <button onClick={onAllJobs}><HistoryIcon s={22} c="var(--blue)" />Track bookings</button>
         </div>
 
-        {onSizing && (
-          <button onClick={onSizing} className="press" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "none", cursor: "pointer", textAlign: "left", display: "flex", gap: 12, alignItems: "center" }}>
-            <span style={{ width: 40, height: 40, borderRadius: 12, background: "var(--blue-tint)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📏</span>
-            <span style={{ flex: 1 }}>
-              <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Buying a new AC? Find the right size</span>
-              <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>1, 1.5 or 2 ton? Free estimate in a minute + installation quote</span>
-            </span>
-            <ChevronRight s={16} c="var(--ink-mute)" />
-          </button>
-        )}
+        {onSizing && <NewAcBanner onOpen={onSizing} />}
 
         {/* Things waiting on the customer */}
         {needsApproval.map((j) => (

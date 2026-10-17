@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BookService } from "./customer/Booking";
 import { SizingPage } from "./customer/Sizing";
+import { AccessoriesPage } from "./customer/Accessories";
 import { CustomerJobPage, InvoicePage } from "./customer/JobPage";
 import { LoginScreen, SignupFlow, SplashScreen } from "./customer/Onboard";
 import {
@@ -29,7 +30,8 @@ type Detail =
   | { k: "amc" }
   | { k: "payments" }
   | { k: "info"; which: "help" | "about" }
-  | { k: "sizing" };
+  | { k: "sizing" }
+  | { k: "accessories" };
 
 const readSession = () => { try { return localStorage.getItem(SESSION_KEY); } catch { return null; } };
 const writeSession = (id: string | null) => { try { if (id) localStorage.setItem(SESSION_KEY, id); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked */ } };
@@ -130,7 +132,7 @@ export default function CustomerApp() {
       }}>
         {/* ── Detail pages ── */}
         {detail?.k === "book" && (
-          <BookService key={detail.acId ?? "new"} db={db} me={me} initialAc={detail.acId} onBack={back} onAddAc={() => push({ k: "addAc", thenBook: true })}
+          <BookService key={detail.acId ?? "new"} db={db} me={me} initialAc={detail.acId} onBack={back} onAddAc={() => push({ k: "addAc", thenBook: true })} onSizing={() => push({ k: "sizing" })}
             onSubmit={(j) => { const id = createJob(j, me!.name); setStack([{ k: "job", id }]); flash("Service booked! We'll assign a technician shortly."); }} />
         )}
         {detail?.k === "job" && (() => {
@@ -166,7 +168,8 @@ export default function CustomerApp() {
         {detail?.k === "amc" && <AmcPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} />}
         {detail?.k === "payments" && <PaymentsPage db={db} me={me} onBack={back} onOpenJob={(id) => push({ k: "job", id })} />}
         {detail?.k === "info" && <InfoPage which={detail.which} db={db} onBack={back} />}
-        {detail?.k === "sizing" && <SizingPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} flash={flash} />}
+        {detail?.k === "sizing" && <SizingPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} onAccessories={() => push({ k: "accessories" })} flash={flash} />}
+        {detail?.k === "accessories" && <AccessoriesPage onBack={back} />}
 
         {/* ── Tabs ── */}
         {!detail && tab === "home" && (

@@ -11,7 +11,7 @@
 import { useSyncExternalStore } from "react";
 import {
   EMPTY_DIAGNOSIS, EMPTY_PREWORK, JOB_FLOW, acLabel, fmtDate, inr, isoDay, jobTotals, nowIso, seedDb, stepOf,
-  isOpen, type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
+  isOpen, type AcQuoteRequest, type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
   type PreWork, type QuoteLine, type Settings, type Technician,
 } from "./data";
 import { buildPayrollRun } from "./finance";
@@ -750,6 +750,30 @@ export function sizingEnquiry(customerId: string, title: string, inputs: unknown
       notify(d, `customer:${customerId}`, "Installation enquiry received", "Our team will call you to confirm a site visit and send a quotation.");
     }
     audit(d, by, wantsQuote ? "Installation enquiry" : "Sizing estimate saved", `${custName(d, customerId)} · ${title}`);
+  });
+}
+
+export type NewAcQuote = Omit<AcQuoteRequest, "id" | "at" | "status">;
+
+/** Customer "Get Best AC Quote": stored for the office (Admin → Growth → New AC quotes) and confirmed to the customer. */
+export function requestAcQuote(q: NewAcQuote, by: string) {
+  const id = `acq${uid()}`;
+  mutate((d) => {
+    (d.acQuotes ??= []).unshift({ ...q, id, at: nowIso(), status: "Open" });
+    const cap = q.capacityTons != null ? `${q.capacityTons} TR` : "size to suggest";
+    notify(d, "admin", "New AC quote request", `${q.contact.name} · ${q.quantity} × ${q.acType} ${cap} · ${q.timeline}. Call +91 ${q.contact.phone}.`);
+    notify(d, `customer:${q.customerId}`, "AC quote request received", "We'll call you with the best prices for your chosen ACs.");
+    audit(d, by, "AC quote request", `${q.contact.name} · ${q.quantity} × ${q.acType} ${cap}`);
+  });
+  return id;
+}
+
+export function setAcQuoteStatus(id: string, status: LeadStatus, by: string) {
+  mutate((d) => {
+    const q = d.acQuotes?.find((x) => x.id === id);
+    if (!q) return;
+    q.status = status;
+    audit(d, by, "AC quote updated", `${q.contact.name} → ${status}`);
   });
 }
 
