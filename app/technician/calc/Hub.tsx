@@ -98,12 +98,12 @@ function ToolCard({ t, fav, onOpen, onFav }: { t: ToolDef; fav: boolean; onOpen:
   return (
     <div style={{ ...card, padding: 12, display: "flex", flexDirection: "column", gap: 6 }} data-tool={t.id}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <span aria-hidden style={{ fontSize: 24, lineHeight: 1 }}>{t.icon}</span>
+        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 10, display: "grid", placeItems: "center", fontSize: 21, lineHeight: 1, background: "linear-gradient(160deg,#262626,#0c0c0c)", border: "2px solid var(--gold)", color: "var(--gold)" }}>{t.icon}</span>
         <button onClick={onFav} aria-label={fav ? `Remove ${t.name} from favourites` : `Add ${t.name} to favourites`} aria-pressed={fav} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: fav ? "var(--gold)" : "var(--line-strong)", padding: 0 }}>★</button>
       </div>
       <b style={{ fontSize: 13.5, lineHeight: 1.25 }}>{t.name}</b>
       <p style={{ ...small, margin: 0, fontSize: 11.5, flex: 1 }}>{t.desc}</p>
-      <button onClick={onOpen} className="press" aria-label={`Open ${t.name}`} style={{ border: "none", borderRadius: 10, padding: "8px 0", background: "var(--blue-tint)", color: "var(--blue)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>Open</button>
+      <button onClick={onOpen} className="press" aria-label={`Open ${t.name}`} style={{ border: "none", borderRadius: 6, padding: "8px 0", background: "var(--red)", color: "white", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>Open</button>
     </div>
   );
 }

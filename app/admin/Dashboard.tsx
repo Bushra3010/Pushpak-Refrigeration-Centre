@@ -52,7 +52,7 @@ export function Dashboard({ db, go, openJob }: { db: Db; go: (s: Section) => voi
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="admin-welcome">
-        <div><p className="eyebrow" style={{ color: "#9ed9d9", marginBottom: 9 }}>SERVICE OPERATIONS</p><h2>A clear view of your working day.</h2><p>{plural(open, "request")} to assign · {plural(inProg, "job")} in progress · {plural(completedToday, "job")} completed today</p></div>
+        <div><p className="eyebrow" style={{ color: "#e8b23a", marginBottom: 9 }}>SERVICE OPERATIONS</p><h2>A clear view of your working day.</h2><p>{plural(open, "request")} to assign · {plural(inProg, "job")} in progress · {plural(completedToday, "job")} completed today</p></div>
         <button className="hero-cta press" style={{ marginTop: 0 }} onClick={() => go("jobs")}>Open dispatch ↗</button>
       </div>
       <div className="admin-grid-4">

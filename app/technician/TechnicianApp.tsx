@@ -72,6 +72,7 @@ export default function TechnicianApp() {
           <>
             {tab === "jobs" && (
               <Dashboard db={db} tech={tech} unread={unread} onOpen={setOpenJob} onBell={() => setBell(true)}
+                onSearch={() => goTab("search")} onStock={() => goTab("stock")} onCalc={(id) => { setTab("calc"); openCalc(id ?? null); }}
                 onToggleDuty={(on) => { updateTech(tech.id, { availability: on ? "Available" : "Off Duty" }, tech.name); flash(on ? "You're on duty" : "You're off duty"); }} />
             )}
             {tab === "search" && <SearchScreen db={db} tech={tech} onOpenJob={setOpenJob} />}

@@ -13,9 +13,9 @@ export function SplashScreen({ onStart }: { onStart: () => void }) {
   return (
     <div className="welcome-screen">
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}><BrandMark size={44} /><Wordmark light /></div>
-      <div className="cooling-art" aria-hidden="true"><div className="ac-illustration"><span /><i /><i /><i /></div><div className="air-line" /><div className="air-line" /><div className="air-line" /><SnowIcon s={40} c="#9ed9d9" w={1.2} /></div>
+      <div className="cooling-art" aria-hidden="true"><div className="ac-illustration"><span /><i /><i /><i /></div><div className="air-line" /><div className="air-line" /><div className="air-line" /><SnowIcon s={40} c="#e8b23a" w={1.2} /></div>
       <div style={{ position: "relative" }}>
-        <p className="eyebrow" style={{ color: "#9ed9d9" }}>WELCOME TO BETTER AC CARE</p>
+        <p className="eyebrow" style={{ color: "#e8b23a" }}>WELCOME TO BETTER AC CARE</p>
         <h1>Keep your cool.<br />We’ll take care<br />of the rest.</h1>
         <p className="welcome-copy">Book a service, track your technician, and keep every AC running at its best.</p>
       </div>

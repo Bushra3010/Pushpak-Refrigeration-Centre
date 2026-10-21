@@ -3,16 +3,15 @@
 import { useState } from "react";
 import { BrandMark } from "../components/Brand";
 import {
-  AcIcon, BellIcon, ChevronRight, ClockIcon, EditIcon, HelpIcon, HistoryIcon, InfoIcon, LogoutIcon, PlusIcon, ReceiptIcon, ShieldIcon, SnowIcon, WrenchIcon,
+  AcIcon, BellIcon, ChevronRight, ClockIcon, EditIcon, HelpIcon, HistoryIcon, InfoIcon, LogoutIcon, ReceiptIcon, ShieldIcon, WrenchIcon,
 } from "../components/icons";
 import { AcForm, AcHistory, AcSpecs, EMPTY_AC, JobPill, MapMock, type AcDraft } from "../components/service";
-import { Avatar, Empty, Footer, PageHeader, Pill, PrimaryButton, Tabs, ViewAll, card, iconBtn, sectionTitle, small } from "../components/ui";
+import { AppHeader, Avatar, BannerCarousel, Empty, Footer, GoldTiles, Hello, PageHeader, Pill, PrimaryButton, SectionHead, Tabs, card, iconBtn, sectionTitle, small } from "../components/ui";
 import {
   acLabel, acSummary, daysBetween, fmtDate, fmtDateTime, initials, inr, isOpen, jobTotals, relDay, today,
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
-import { NewAcBanner } from "./Sizing";
 
 const myJobs = (db: Db, me: Customer) => db.jobs.filter((j) => j.customerId === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 const serviceDue = (db: Db, ac: AcUnit) => { const s = acSummary(db, ac.id); return !s.lastService || daysBetween(s.lastService, today()) >= db.settings.reminderDays; };
@@ -32,36 +31,29 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
   const due = acs.filter((a) => serviceDue(db, a) && !active.some((j) => j.acId === a.id));
   const hour = new Date().getHours();
 
+  const first = me.name.split(" ")[0];
+
   return (
-    <div style={{ paddingBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 12px" }}>
-        <BrandMark size={42} />
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--ink-soft)" }}>Good {hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"},</p>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{me.name.split(" ")[0]} 👋</p>
-        </div>
-        <button onClick={onNotifications} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} className="press" style={{ ...iconBtn, width: 42, height: 42, borderRadius: "50%", background: "var(--surface)", justifyContent: "center", boxShadow: "var(--shadow-card)" }}>
-          <BellIcon s={20} c="var(--ink)" />
-          {unread > 0 && <span style={{ position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 10, background: "var(--red)", color: "white", fontSize: 9.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid white" }}>{unread}</span>}
-        </button>
-      </div>
+    <div style={{ paddingBottom: 12, background: "#fff", minHeight: "100%" }}>
+      <AppHeader onBell={onNotifications} unread={unread} />
+      <Hello name={first} sub={`Good ${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"} · ${acs.length} AC${acs.length === 1 ? "" : "s"} registered`} />
+
+      <BannerCarousel banners={[
+        { title: <>Summer<br />Ready AC</>, text: "Jet-pump deep cleaning, gas check & cooling test", cta: "Book Now", art: "❄️", onClick: () => onBook() },
+        { title: <>AMC<br />Care Plan</>, text: `3 services a year + priority repairs from ${inr(db.settings.amcBasic)}/AC`, cta: "View Plans", art: "🛡️", onClick: onAmc },
+        ...(onSizing ? [{ title: <>Buy the<br />Right AC</>, text: "Find the right tonnage for your room in 1 minute", cta: "Find My AC", art: "🏠", onClick: onSizing }] : []),
+      ]} />
+
+      <GoldTiles tiles={[
+        { icon: "🛠️", label: "Book Service", onClick: () => onBook() },
+        { icon: "📋", label: "Track Bookings", onClick: onAllJobs, count: active.length },
+        { icon: "🛡️", label: "AMC Care Plans", onClick: onAmc },
+        ...(onSizing ? [{ icon: "❄️", label: "New AC Finder", onClick: onSizing }] : []),
+        { icon: "➕", label: "Add My AC", onClick: onAddAc },
+        { icon: "🔧", label: "Repair & Gas Refill", onClick: () => onBook(due[0]?.id) },
+      ]} />
 
       <div style={{ padding: "0 16px" }}>
-        <div className="customer-hero">
-          <div className="hero-orbit" aria-hidden="true"><SnowIcon s={92} c="#9ed9d9" w={1} /></div>
-          <p className="eyebrow" style={{ color: "#9ed9d9" }}>YOUR COMFORT, TAKEN CARE OF</p>
-          <h1>Good days start<br />with better cooling.</h1>
-          <p>Expert AC care, clear pricing, and every service detail in one place.</p>
-          <button onClick={() => onBook()} className="hero-cta press">Book Service <span aria-hidden="true">↗</span></button>
-        </div>
-        <div className="service-shortcuts">
-          <button onClick={() => onBook()}><WrenchIcon s={22} c="var(--blue)" />Repair &amp; service</button>
-          <button onClick={onAmc}><ShieldIcon s={22} c="var(--blue)" />Care plans</button>
-          <button onClick={onAllJobs}><HistoryIcon s={22} c="var(--blue)" />Track bookings</button>
-        </div>
-
-        {onSizing && <NewAcBanner onOpen={onSizing} />}
-
         {/* Things waiting on the customer */}
         {needsApproval.map((j) => (
           <ActionCard key={`a${j.id}`} tone="gold" title="Quotation waiting for your approval" body={`${j.quote?.no} · ${inr(jobTotals(j, db.settings).total)} · ${db.acs.find((a) => a.id === j.acId)?.application} AC`} cta="Review" onClick={() => onOpenJob(j.id)} />
@@ -79,10 +71,7 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
         {/* Active services */}
         {active.length > 0 && (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={sectionTitle}>Active services</h3>
-              <ViewAll onClick={onAllJobs} />
-            </div>
+            <SectionHead title="Active Services" onAll={onAllJobs} />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {active.slice(0, 3).map((j) => <JobRow key={j.id} db={db} job={j} onOpen={() => onOpenJob(j.id)} />)}
             </div>
@@ -90,10 +79,7 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
         )}
 
         {/* My ACs */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={sectionTitle}>My ACs</h3>
-          <button onClick={onAddAc} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--blue)", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginTop: 10 }}><PlusIcon s={14} c="var(--blue)" /> Add AC</button>
-        </div>
+        <SectionHead title="My ACs" onAll={onAddAc} allText="+ Add AC" />
         <div className="no-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", margin: "0 -16px", padding: "0 16px 4px" }}>
           {acs.map((a) => {
             const s = acSummary(db, a.id);
@@ -114,6 +100,16 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
           <ActionCard tone="blue" title={`Service due for ${due.length === 1 ? `your ${due[0].application.toLowerCase()} AC` : `${due.length} ACs`}`}
             body={`Regular cleaning every ${Math.round(db.settings.reminderDays / 30)} months keeps cooling strong and bills low.`} cta="Book" onClick={() => onBook(due[0].id)} />
         )}
+
+        {/* Popular service — Bada Business style feature card */}
+        <SectionHead title="Popular Services" onAll={() => onBook()} />
+        <div className="bb-feature">
+          <div className="bb-feature-media"><strong>Deep<br />Cleaning</strong><span className="bb-art" aria-hidden>🧼</span></div>
+          <div style={{ display: "flex" }}><span className="bb-tag">MOST BOOKED</span></div>
+          <h4>AC Jet-Pump Service — DEEP CLEAN, GAS CHECK &amp; COOLING TEST</h4>
+          <button className="bb-btn-black press" onClick={() => onBook()}>Book Service</button>
+          <button className="bb-btn-black press" onClick={onAmc}>View AMC Plans</button>
+        </div>
 
         {/* AMC */}
         <button onClick={onAmc} className="press" style={{ ...card, width: "100%", marginTop: 12, padding: 16, border: "none", cursor: "pointer", textAlign: "left", display: "flex", gap: 12, alignItems: "center", background: me.amc ? "var(--success)" : "var(--gold-tint)" }}>

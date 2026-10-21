@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { BrandMark, Wordmark } from "./Brand";
-import { BackIcon, ChevronRight } from "./icons";
+import { BackIcon, BellIcon, ChevronRight, SearchIcon } from "./icons";
 
 /* Mobile building blocks shared by the customer and technician apps (ported from zevto). */
 
@@ -11,7 +12,7 @@ export function PageHeader({ title, sub, onBack, right }: { title: string; sub?:
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 14, padding: "18px 16px 12px",
-      position: "sticky", top: 0, zIndex: 20, background: "var(--app-bg)",
+      position: "sticky", top: 0, zIndex: 20, background: "#fff", borderBottom: "1px solid var(--line)", marginBottom: 12,
     }}>
       {onBack && (
         <button onClick={onBack} aria-label="Back" className="press" style={iconBtn}>
@@ -19,7 +20,7 @@ export function PageHeader({ title, sub, onBack, right }: { title: string; sub?:
         </button>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--ink)" }}>{title}</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.02em" }}>{title}</h2>
         {sub && <p style={{ margin: 0, fontSize: 12, color: "var(--ink-mute)" }}>{sub}</p>}
       </div>
       {right && <div style={{ display: "flex", alignItems: "center", gap: 12 }}>{right}</div>}
@@ -32,23 +33,18 @@ export const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", position: "relative",
 };
 
-/** Segmented pill tabs — white track, blue active pill. */
+/** Text tabs with a dot under the active one (Bada Business style). */
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (id: T) => void }) {
   return (
-    <div style={{
-      display: "flex", background: "var(--surface)", borderRadius: 999, padding: 4,
-      boxShadow: "var(--shadow-card)",
-    }}>
+    <div style={{ display: "flex", gap: 4, background: "var(--surface)", borderRadius: 10, padding: "4px 6px 2px", boxShadow: "var(--shadow-card)" }}>
       {tabs.map((t) => {
         const on = t.id === value;
         return (
           <button key={t.id} onClick={() => onChange(t.id)} aria-pressed={on} style={{
-            flex: 1, border: "none", cursor: "pointer", borderRadius: 999,
-            padding: "9px 6px", fontSize: 13.5, fontWeight: on ? 600 : 500,
-            background: on ? "var(--blue)" : "transparent",
-            color: on ? "white" : "var(--ink-soft)",
-            transition: "background 0.2s, color 0.2s",
-          }}>{t.label}</button>
+            flex: 1, border: "none", cursor: "pointer", background: "transparent",
+            padding: "9px 6px 4px", fontSize: 14, fontWeight: on ? 600 : 500,
+            color: on ? "var(--ink)" : "var(--ink-mute)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+          }}>{t.label}<span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: on ? "var(--ink)" : "transparent" }} /></button>
         );
       })}
     </div>
@@ -76,14 +72,14 @@ export function Pill({ tone, children }: { tone: Tone; children: React.ReactNode
 export function PrimaryButton({ children, onClick, disabled, tone = "blue", style, type = "button" }: {
   children: React.ReactNode; onClick?: () => void; disabled?: boolean; tone?: "blue" | "gold" | "green"; style?: React.CSSProperties; type?: "button" | "submit";
 }) {
-  const bg = tone === "gold" ? "linear-gradient(135deg,var(--gold),var(--gold-dark))" : tone === "green" ? "linear-gradient(135deg,#22a06b,#15803d)" : "linear-gradient(135deg,var(--blue),var(--blue-dark))";
+  const bg = tone === "gold" ? "var(--gold)" : tone === "green" ? "#15803d" : "#111";
   return (
     <button type={type} onClick={onClick} disabled={disabled} className="press" style={{
-      width: "100%", border: "none", borderRadius: 16, padding: "15px 18px",
-      fontSize: 15, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer",
+      width: "100%", border: "none", borderRadius: 10, padding: "15px 18px",
+      fontSize: 15, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
       display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
       background: disabled ? "var(--line-strong)" : bg,
-      color: disabled ? "var(--ink-mute)" : "white",
+      color: disabled ? "var(--ink-mute)" : tone === "gold" ? "#111" : "white",
       boxShadow: "none",
       ...style,
     }}>{children}</button>
@@ -93,7 +89,7 @@ export function PrimaryButton({ children, onClick, disabled, tone = "blue", styl
 export function GhostButton({ children, onClick, danger, style }: { children: React.ReactNode; onClick?: () => void; danger?: boolean; style?: React.CSSProperties }) {
   return (
     <button onClick={onClick} className="press" style={{
-      width: "100%", border: `1.5px solid ${danger ? "#fecaca" : "var(--line-strong)"}`, background: "var(--surface)", borderRadius: 14, padding: 13,
+      width: "100%", border: `1.5px solid ${danger ? "#fecaca" : "var(--line-strong)"}`, background: "var(--surface)", borderRadius: 10, padding: 13,
       fontSize: 14, fontWeight: 700, color: danger ? "var(--error-text)" : "var(--text-secondary)", cursor: "pointer",
       display: "flex", alignItems: "center", justifyContent: "center", gap: 6, ...style,
     }}>{children}</button>
@@ -101,7 +97,7 @@ export function GhostButton({ children, onClick, danger, style }: { children: Re
 }
 
 export const card: React.CSSProperties = {
-  background: "var(--surface)", borderRadius: 16, boxShadow: "var(--shadow-card)",
+  background: "var(--surface)", borderRadius: 12, boxShadow: "var(--shadow-card)",
 };
 
 export const label: React.CSSProperties = {
@@ -109,13 +105,13 @@ export const label: React.CSSProperties = {
 };
 
 export const field: React.CSSProperties = {
-  width: "100%", background: "var(--surface)", border: "1.5px solid var(--line)",
-  borderRadius: 14, padding: "13px 14px", fontSize: 14, color: "var(--ink)", outline: "none",
+  width: "100%", background: "var(--surface)", border: "1.5px solid var(--line-strong)",
+  borderRadius: 10, padding: "13px 14px", fontSize: 14, color: "var(--ink)", outline: "none",
 };
 
 export const small: React.CSSProperties = { margin: "2px 0 0", fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.5 };
 
-export const sectionTitle: React.CSSProperties = { margin: "20px 2px 10px", fontSize: 15, fontWeight: 700, color: "var(--ink)" };
+export const sectionTitle: React.CSSProperties = { margin: "22px 2px 10px", fontSize: 17, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--ink)" };
 
 /** Sticky footer bar for detail pages with a main action. */
 export function Footer({ children }: { children: React.ReactNode }) {
@@ -123,7 +119,7 @@ export function Footer({ children }: { children: React.ReactNode }) {
     <div className="no-print" style={{
       position: "sticky", bottom: 0, zIndex: 20,
       padding: "12px 16px calc(14px + env(safe-area-inset-bottom))",
-      background: "linear-gradient(to top, var(--app-bg) 75%, rgba(238,241,251,0))",
+      background: "linear-gradient(to top, var(--app-bg) 75%, rgba(246,246,247,0))",
     }}>{children}</div>
   );
 }
@@ -154,7 +150,7 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} style={{
       width: 46, height: 27, borderRadius: 999, border: "none", cursor: "pointer", padding: 3, flexShrink: 0,
-      background: on ? "var(--blue)" : "var(--line-strong)", transition: "background 0.2s",
+      background: on ? "#15803d" : "var(--line-strong)", transition: "background 0.2s",
       display: "flex", justifyContent: on ? "flex-end" : "flex-start",
     }}>
       <span style={{ width: 21, height: 21, borderRadius: "50%", background: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
@@ -173,8 +169,8 @@ export function Chips<T extends string>({ options, value, onChange, multi }: {
         const on = sel(o);
         return (
           <button key={o} type="button" onClick={() => onChange(o)} aria-pressed={on} className="press" style={{
-            border: on ? "1.5px solid var(--blue)" : "1.5px solid var(--line)", borderRadius: 999, padding: "8px 13px",
-            background: on ? "var(--blue-tint)" : "var(--surface)", color: on ? "var(--blue)" : "var(--text-secondary)",
+            border: on ? "1.5px solid #111" : "1.5px solid var(--line-strong)", borderRadius: 999, padding: "8px 13px",
+            background: on ? "#111" : "var(--surface)", color: on ? "white" : "var(--text-secondary)",
             fontSize: 12.5, fontWeight: 600, cursor: "pointer",
           }}>{o}</button>
         );
@@ -206,16 +202,16 @@ export function Avatar({ initials, size = 44 }: { initials: string; size?: numbe
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      background: "linear-gradient(135deg,var(--blue),var(--blue-dark))", color: "white",
+      background: "#111", color: "var(--gold)", border: "2px solid var(--gold)",
       display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.32, fontWeight: 700,
     }}>{initials}</div>
   );
 }
 
-export function ViewAll({ onClick, text = "View All" }: { onClick: () => void; text?: string }) {
+export function ViewAll({ onClick, text = "See All" }: { onClick: () => void; text?: string }) {
   return (
-    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--blue)", fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 2 }}>
-      {text} <ChevronRight s={14} c="var(--blue)" />
+    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink)", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 2 }}>
+      {text}
     </button>
   );
 }
@@ -246,27 +242,27 @@ export function Toast({ msg, raised }: { msg: string | null; raised?: boolean })
   );
 }
 
-/** Floating pill bottom nav shared by the customer and technician apps. */
+/** Flat bottom tab bar (Bada Business style) shared by the customer and technician apps. */
 export function PillNav<T extends string>({ tabs, active, onChange }: {
   tabs: { id: T; label: string; icon: (c: string) => React.ReactNode; dot?: number | boolean }[]; active: T; onChange: (t: T) => void;
 }) {
   return (
-    <div className="no-print" style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 14px calc(10px + env(safe-area-inset-bottom))", pointerEvents: "none", zIndex: 50 }}>
+    <div className="no-print" style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 50 }}>
       <nav aria-label="Main navigation" style={{
-        display: "flex", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-        borderRadius: 20, padding: 6, boxShadow: "0 4px 24px rgba(23,43,58,0.12)", pointerEvents: "auto",
+        display: "flex", background: "#fff", borderTop: "1px solid var(--line)", boxShadow: "0 -4px 16px rgba(0,0,0,0.05)",
+        padding: "6px 4px calc(6px + env(safe-area-inset-bottom))",
       }}>
         {tabs.map((t) => {
           const on = t.id === active;
-          const color = on ? "var(--blue)" : "var(--ink)";
+          const color = on ? "#111" : "#8a8d93";
           return (
             <button key={t.id} aria-label={t.label} aria-current={on ? "page" : undefined} onClick={() => onChange(t.id)} style={{
-              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, position: "relative",
-              background: on ? "var(--blue-tint)" : "transparent", border: "none", borderRadius: 14, cursor: "pointer", padding: "8px 0 7px",
-              transition: "background 0.2s",
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative",
+              background: "transparent", border: "none", cursor: "pointer", padding: "6px 0 4px",
             }}>
+              <span aria-hidden style={{ position: "absolute", top: -6, width: 26, height: 3, borderRadius: "0 0 3px 3px", background: on ? "#111" : "transparent" }} />
               {t.icon(color)}
-              <span style={{ fontSize: 10.5, fontWeight: on ? 600 : 500, color }}>{t.label}</span>
+              <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 500, color }}>{t.label}</span>
               {!!t.dot && !on && (
                 <span style={{
                   position: "absolute", top: 3, left: "calc(50% + 5px)", minWidth: 16, height: 16, padding: "0 4px", borderRadius: 10,
@@ -298,6 +294,109 @@ export function PhoneShell({ children, role = "customer" }: { children: React.Re
         </div>
       </aside>
       <div className={`phone-workspace ${role}-workspace`}>{children}</div>
+    </div>
+  );
+}
+
+/* ───────────── Bada Business style home blocks ───────────── */
+
+/** Sticky white top bar: menu (or brand) left, centred logo + wordmark, search and bell right. */
+export function AppHeader({ onMenu, onSearch, onBell, unread = 0, tagline = "AC Sales · Service · Repair" }: {
+  onMenu?: () => void; onSearch?: () => void; onBell?: () => void; unread?: number; tagline?: string;
+}) {
+  return (
+    <header className="bb-header">
+      {onMenu ? (
+        <button className="bb-icon-btn press" onClick={onMenu} aria-label="Menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h12M4 18h16" /></svg>
+        </button>
+      ) : <BrandMark size={36} />}
+      <div className="bb-logo">
+        {onMenu && <BrandMark size={30} />}
+        <div style={{ lineHeight: 1.05, textAlign: "left" }}>
+          <p style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: "-0.02em", color: "#111" }}>Pushpak</p>
+          <p style={{ margin: "1px 0 0", fontSize: 8.5, fontWeight: 600, letterSpacing: "0.04em", color: "#555" }}>{tagline}</p>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+        {onSearch && <button className="bb-icon-btn press" onClick={onSearch} aria-label="Search"><SearchIcon s={22} c="#111" /></button>}
+        {onBell && (
+          <button className="bb-icon-btn ring press" onClick={onBell} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
+            <BellIcon s={19} c="#111" />
+            {unread > 0 && <span className="bb-badge">{unread}</span>}
+          </button>
+        )}
+      </div>
+    </header>
+  );
+}
+
+export function Hello({ name, sub }: { name: string; sub?: React.ReactNode }) {
+  return (
+    <div className="bb-hello">
+      Hello, <b>{name}</b>
+      {sub && <div style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2, letterSpacing: 0 }}>{sub}</div>}
+    </div>
+  );
+}
+
+export type Banner = { title: React.ReactNode; text: string; cta: string; art: string; onClick: () => void };
+
+/** Swipeable promo banners with auto-advance and dots. */
+export function BannerCarousel({ banners }: { banners: Banner[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (banners.length < 2) return;
+    const t = setInterval(() => {
+      const el = ref.current;
+      if (!el) return;
+      const next = (Math.round(el.scrollLeft / (el.scrollWidth / banners.length)) + 1) % banners.length;
+      const child = el.children[next] as HTMLElement | undefined;
+      if (child) el.scrollTo({ left: child.offsetLeft - 16, behavior: "smooth" });
+    }, 4500);
+    return () => clearInterval(t);
+  }, [banners.length]);
+  return (
+    <div>
+      <div ref={ref} className="bb-carousel" onScroll={(e) => { const el = e.currentTarget; setI(Math.round(el.scrollLeft / (el.scrollWidth / banners.length))); }}>
+        {banners.map((b, n) => (
+          <button key={n} className="bb-banner press" onClick={b.onClick}>
+            <h3>{b.title}</h3>
+            <p>“{b.text}”</p>
+            <span className="bb-chip">{b.cta} ›</span>
+            <span className="bb-art" aria-hidden>{b.art}</span>
+          </button>
+        ))}
+      </div>
+      {banners.length > 1 && <div className="bb-dots" aria-hidden>{banners.map((_, n) => <span key={n} className={n === i ? "on" : ""} />)}</div>}
+    </div>
+  );
+}
+
+export type Tile = { icon: React.ReactNode; label: string; onClick: () => void; count?: number };
+
+/** 2-column black tiles with gold borders. */
+export function GoldTiles({ tiles }: { tiles: Tile[] }) {
+  return (
+    <div className="bb-tiles">
+      {tiles.map((t) => (
+        <button key={t.label} className="bb-tile press" onClick={t.onClick}>
+          <span className="bb-tile-icon" aria-hidden>{t.icon}</span>
+          <span>{t.label}</span>
+          {!!t.count && <span className="bb-count">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** "Popular Courses ……… See All" section heading. */
+export function SectionHead({ title, onAll, allText = "See All" }: { title: string; onAll?: () => void; allText?: string }) {
+  return (
+    <div className="bb-section">
+      <h3>{title}</h3>
+      {onAll && <button onClick={onAll}>{allText}</button>}
     </div>
   );
 }

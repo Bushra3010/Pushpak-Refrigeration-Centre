@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { MyFinance } from "./Timer";
 import { PipeCalcSheet } from "./PipeSheet";
 import { BrandMark, Wordmark } from "../components/Brand";
-import { AlertIcon, BellIcon, ChevronRight, ClockIcon, LogoutIcon, MinusIcon, PinIcon, PlusIcon, SearchIcon, StarIcon } from "../components/icons";
+import { AlertIcon, ChevronRight, ClockIcon, LogoutIcon, MinusIcon, PinIcon, PlusIcon, SearchIcon, StarIcon } from "../components/icons";
 import { AcHistory, AcSpecs, JobPill, PriorityPill, SecureScreen } from "../components/service";
-import { Avatar, BottomSheet, Empty, PageHeader, Pill, PrimaryButton, Tabs, Toggle, card, field, iconBtn, label, sectionTitle, small } from "../components/ui";
+import { AppHeader, Avatar, BottomSheet, Empty, GoldTiles, Hello, PageHeader, Pill, PrimaryButton, SectionHead, Tabs, Toggle, card, field, label, sectionTitle, small } from "../components/ui";
 import {
   DEMO_OTP, acLabel, acSummary, fmtDateTime, initials, inr, isDone, isOpen, jobTotals, relDay, today,
   type AppNotification, type Db, type Job, type Technician,
@@ -71,8 +71,9 @@ export function TechLogin({ db, onDone }: { db: Db; onDone: (techId: string) => 
 type JobTab = "today" | "upcoming" | "done";
 const ACTIVE = (j: Job) => isOpen(j) || (j.status === "Invoiced");
 
-export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
+export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSearch, onCalc, onStock }: {
   db: Db; tech: Technician; unread: number; onOpen: (id: string) => void; onBell: () => void; onToggleDuty: (on: boolean) => void;
+  onSearch?: () => void; onCalc?: (id?: string) => void; onStock?: () => void;
 }) {
   const [tab, setTab] = useState<JobTab>("today");
   const mine = db.jobs.filter((j) => j.techId === tech.id || (j.helpers ?? []).includes(tech.id));
@@ -90,25 +91,28 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
   const onDuty = tech.availability !== "Off Duty";
 
   return (
-    <div style={{ paddingBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 12px" }}>
-        <Avatar initials={initials(tech.name)} size={44} />
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--ink-soft)" }}>Good day,</p>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{tech.name}</p>
-        </div>
+    <div style={{ paddingBottom: 12, background: "#fff", minHeight: "100%" }}>
+      <AppHeader onSearch={onSearch} onBell={onBell} unread={unread} tagline="Technician App" />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingRight: 16 }}>
+        <Hello name={tech.name} sub={`${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · ${tech.area}`} />
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: onDuty ? "var(--success-text)" : "var(--ink-mute)" }}>{onDuty ? "ON DUTY" : "OFF"}</span>
           <Toggle on={onDuty} onChange={onToggleDuty} label="On duty" />
         </div>
-        <button onClick={onBell} aria-label="Notifications" style={{ ...iconBtn, marginLeft: 4 }}>
-          <BellIcon s={22} c="var(--ink)" />
-          {unread > 0 && <span style={{ position: "absolute", top: -4, right: -6, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 10, background: "var(--red)", color: "white", fontSize: 9.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid white" }}>{unread}</span>}
-        </button>
       </div>
 
-      <div style={{ padding: "0 16px" }}>
-        <div className="shift-heading"><div><h1>Let’s get to work.</h1><p>{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · {tech.area}</p></div><Pill tone={onDuty ? "green" : "grey"}>{onDuty ? "On duty" : "Off duty"}</Pill></div>
+      {onCalc && (
+        <GoldTiles tiles={[
+          { icon: "📋", label: "New Jobs", onClick: () => document.getElementById("job-list")?.scrollIntoView({ behavior: "smooth" }), count: newJobs.length },
+          { icon: "🧮", label: "All Calculators", onClick: () => onCalc() },
+          { icon: "％", label: "GST Calculator", onClick: () => onCalc("gst") },
+          { icon: "📏", label: "Unit Converter", onClick: () => onCalc("unit-converter") },
+          ...(onSearch ? [{ icon: "👥", label: "My Customers", onClick: onSearch }] : []),
+          ...(onStock ? [{ icon: "📦", label: "Van Stock", onClick: onStock }] : []),
+        ]} />
+      )}
+
+      <div style={{ padding: "14px 16px 0" }}>
         <div className="shift-summary">
           {[[String(todays.length), "Today"], [String(pending.length), "Pending"], [String(progress.length), "In progress"], [String(doneToday.length), "Completed"]].map(([v, l], i) => (
             <div key={l} style={{ flex: 1, textAlign: "center", borderRight: i < 3 ? "1px solid rgba(255,255,255,0.18)" : "none" }}>
@@ -152,7 +156,8 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty }: {
           </>
         )}
 
-        <div style={{ marginTop: 16 }}>
+        <SectionHead title="My Jobs" />
+        <div id="job-list">
           <Tabs<JobTab> value={tab} onChange={setTab} tabs={[{ id: "today", label: "Today" }, { id: "upcoming", label: "Upcoming" }, { id: "done", label: "Completed" }]} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
