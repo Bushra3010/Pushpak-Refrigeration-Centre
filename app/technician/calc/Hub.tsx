@@ -10,6 +10,7 @@ import type { Ctx } from "./kit";
 import { CableElectrical, CopperPipe, DrainPipe, ExtraMaterial, InstallationEstimate, Insulation, StandAccessories, Tonnage } from "./install";
 import { AirDeltaT, Airflow, GasWeightPrice, PressureTemperature, RefrigerantCharge, RefrigerantUsage, RepairEstimate, SuperheatSubcool } from "./service";
 import { AmcPlan, ElectricityCost, ReplacementSavings, UnitConverter } from "./energy";
+import { GstCalculator } from "./gst";
 import { CustomerBill, MaterialRequirement, OvertimeEstimate, TravelClaim, WorkHours } from "./daily";
 
 /* Technician Calculators hub — /technician#calculators, each calculator at /technician#calculators/<id>. */
@@ -21,7 +22,7 @@ const SCREENS: Record<string, (p: { ctx: Ctx }) => React.ReactElement> = {
   "superheat-subcooling": SuperheatSubcool, "air-delta-t": AirDeltaT, airflow: Airflow, "repair-estimate": RepairEstimate,
   "electricity-cost": ElectricityCost, "replacement-savings": ReplacementSavings, "amc-plan": AmcPlan, "unit-converter": UnitConverter,
   "work-hours": WorkHours, overtime: OvertimeEstimate, "travel-claim": TravelClaim, "material-requirement": MaterialRequirement, "customer-bill": CustomerBill,
-  "gas-weight-price": GasWeightPrice,
+  "gas-weight-price": GasWeightPrice, gst: GstCalculator,
 };
 
 export const CALC_ROUTE = "#calculators";

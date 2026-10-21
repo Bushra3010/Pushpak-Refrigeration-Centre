@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import { OfflineSupport } from "./components/OfflineSupport";
 
 // Same typeface as the zevto apps — self-hosted via next/font.
 const poppins = Poppins({
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={poppins.variable}>
       <body style={{ margin: 0, padding: 0, minHeight: "100vh", fontFamily: "var(--font-poppins)" }}>
         {children}
+        <OfflineSupport />
       </body>
     </html>
   );

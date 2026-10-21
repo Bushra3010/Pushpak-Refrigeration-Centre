@@ -18,10 +18,10 @@ afterEach(cleanup);
 const FORBIDDEN = /markup|margin|profit|purchase cost|unit cost|copper rate per kg|₹\s?850\b/i;
 
 describe("hub", () => {
-  it("shows all 25 calculators by default, grouped, each with an Open button", () => {
+  it("shows all 26 calculators by default, grouped, each with an Open button", () => {
     render(<CalculatorsHub db={db()} tech={tech("t1")} tool={null} onOpen={noop} flash={noop} />);
-    expect(TOOLS).toHaveLength(25);
-    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(25);
+    expect(TOOLS).toHaveLength(26);
+    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(26);
     for (const c of ["Installation & Quotation", "Service & Diagnostics", "Energy & Customer Planning", "Daily Work & Billing"]) expect(screen.getAllByText(c).length).toBeGreaterThan(0);
   });
   it("search by name or purpose, and category filter", () => {
@@ -39,7 +39,7 @@ describe("hub", () => {
     expect(db().techPrefs!.t1.fav).toEqual(["drain-pipe"]);
     rerender(<CalculatorsHub db={db()} tech={tech("t1")} tool={null} onOpen={noop} flash={noop} />);
     expect(screen.getByText("★ Favourites")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(25);
+    expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(26);
     expect(db().techPrefs!.t2).toBeUndefined();
   });
   it("routes: #calculators and #calculators/<id>; opening records recently used", () => {
@@ -52,7 +52,7 @@ describe("hub", () => {
 });
 
 describe("every calculator opens, calculates and resets without leaking internal pricing", () => {
-  for (const t of TOOLS)
+  for (const t of TOOLS.filter((x) => x.id !== "gst")) // GST is live (no Calculate) — tested below
     it(`${t.no.toString().padStart(2, "0")} ${t.name}`, () => {
       render(<CalculatorsHub db={db()} tech={tech("t2")} tool={t.id} onOpen={noop} flash={noop} />);
       expect(screen.getByRole("heading", { name: t.name })).toBeTruthy();
@@ -64,6 +64,22 @@ describe("every calculator opens, calculates and resets without leaking internal
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
       expect(screen.queryByText("Result")).toBeNull();
     });
+});
+
+describe("GST calculator updates as you type", () => {
+  it("excluding → including, CGST + SGST → IGST, reset", () => {
+    render(<CalculatorsHub db={db()} tech={tech("t2")} tool="gst" onOpen={noop} flash={noop} />);
+    expect(screen.queryByRole("button", { name: "Calculate" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Amount (₹)"), { target: { value: "11800" } });
+    expect(screen.getByText("₹13,924.00")).toBeTruthy(); // 11,800 + 18%
+    expect(screen.getAllByText("₹1,062.00")).toHaveLength(2); // CGST 9% + SGST 9%
+    fireEvent.click(screen.getByRole("button", { name: "Including GST" }));
+    expect(screen.getByText("₹10,000.00")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "IGST" }));
+    expect(screen.getByText("IGST @ 18%")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByText(/Enter an amount/)).toBeTruthy();
+  });
 });
 
 describe("quotation, diagnostics and claims actions", () => {

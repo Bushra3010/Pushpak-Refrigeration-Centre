@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ATM_KPA, airDeltaT, airflow, cableAssessment, convert, customerBill, drainPipe, electricityCost, extraMaterial, insulation, materialRequirement,
+  ATM_KPA, convertLength, feetInches, gstCalc, toFeetInches, airDeltaT, airflow, cableAssessment, convert, customerBill, drainPipe, electricityCost, extraMaterial, insulation, materialRequirement,
   gasWeightPrice, ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, replacementSavings, standCheck, summariseIntervals, superheatSubcool, toAbsKpa, travelClaim,
   type ChargeRule,
 } from "@/app/lib/calc/tools";
@@ -43,6 +43,48 @@ describe("unit conversions", () => {
     expect(c.find((x) => x.unit === "BTU/h")!.value).toBe(12000);
     expect(c.find((x) => x.unit === "kW cooling")!.value).toBeCloseTo(3.5169, 4);
     expect(convert("airflow", 100, "CFM")[0].value).toBeCloseTo(169.90, 2);
+  });
+});
+
+describe("length: every unit, feet + inches", () => {
+  const at = (v: number, from: Parameters<typeof convertLength>[1]) => Object.fromEntries(convertLength(v, from).map((r) => [r.unit, r.value]));
+  it("inch, feet, metre, mm, cm", () => {
+    expect(at(1, "in")).toMatchObject({ mm: 25.4, cm: 2.54 });
+    expect(at(12, "in").ft).toBeCloseTo(1, 12);
+    expect(at(10, "ft").m).toBeCloseTo(3.048, 12);
+    expect(at(1, "ft").in).toBeCloseTo(12, 12);
+    expect(at(1, "ft").mm).toBe(304.8);
+    expect(at(1, "ft").cm).toBeCloseTo(30.48, 12);
+    expect(at(1, "m").ft).toBeCloseTo(3.2808, 4);
+    expect(at(1, "m").in).toBeCloseTo(39.3701, 4);
+    expect(at(25.4, "mm").in).toBeCloseTo(1, 12);
+    expect(at(100, "cm").ft).toBeCloseTo(3.2808, 4);
+    expect(() => convertLength(-1, "m")).toThrow(/negative/);
+  });
+  it("5' 8\" → mm, cm, m, decimal feet", () => {
+    const r = feetInches(5, 8);
+    expect(r.totalIn).toBe(68);
+    expect(r.mm).toBeCloseTo(1727.2, 9);
+    expect(r.cm).toBeCloseTo(172.72, 9);
+    expect(r.m).toBeCloseTo(1.7272, 9);
+    expect(r.decimalFt).toBeCloseTo(5.6667, 4);
+    expect(toFeetInches(68)).toEqual({ ft: 5, inch: 8 });
+    expect(toFeetInches(11.999)).toEqual({ ft: 1, inch: 0 });
+  });
+});
+
+describe("GST calculator", () => {
+  it("excluding: GST added on top, CGST + SGST halves", () => {
+    const r = gstCalc(10000, 2, 18, "exclusive", "intra");
+    expect(r).toMatchObject({ taxable: 20000, tax: 3600, cgst: 1800, sgst: 1800, igst: 0, total: 23600 });
+  });
+  it("including: GST taken out, IGST, parts add up to the total", () => {
+    const r = gstCalc(11800, 1, 18, "inclusive", "inter");
+    expect(r).toMatchObject({ taxable: 10000, tax: 1800, igst: 1800, total: 11800 });
+    const odd = gstCalc(99.99, 1, 18, "inclusive", "intra");
+    expect(odd.cgst + odd.sgst).toBeCloseTo(odd.tax, 9);
+    expect(odd.taxable + odd.tax).toBeCloseTo(99.99, 9);
+    expect(() => gstCalc(100, 0, 18, "exclusive", "intra")).toThrow(/Quantity/);
   });
 });
 

@@ -360,6 +360,68 @@ export function convert(kind: ConvKind, value: number, from: string, opts: { bas
   }
 }
 
+/* Length: every unit at once, via exact millimetre factors (1 in = 25.4 mm, 1 ft = 12 in = 304.8 mm). */
+
+export const LENGTH_UNITS = ["mm", "cm", "m", "in", "ft"] as const;
+export type LengthU = (typeof LENGTH_UNITS)[number];
+export const MM_PER: Record<LengthU, number> = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 };
+
+/** Multiplier from one length unit to another, as a readable step: "× 2.54" when the factor is short, else "÷ 12". */
+export function lengthStep(from: LengthU, to: LengthU): { op: "×" | "÷"; factor: number } {
+  const f = MM_PER[from] / MM_PER[to];
+  const short = (n: number) => Number(n.toFixed(4)) === Number(n.toPrecision(12));
+  return short(f) ? { op: "×", factor: f } : { op: "÷", factor: MM_PER[to] / MM_PER[from] };
+}
+
+export function convertLength(value: number, from: LengthU): { unit: LengthU; value: number; step: { op: "×" | "÷"; factor: number } }[] {
+  need(Number.isFinite(value), "Enter a number.");
+  need(value >= 0, "Length cannot be negative.");
+  const mm = value * MM_PER[from];
+  return LENGTH_UNITS.filter((u) => u !== from).map((unit) => ({ unit, value: mm / MM_PER[unit], step: lengthStep(from, unit) }));
+}
+
+/** Total inches → whole feet + remaining inches (rounded to `dp`, carrying 12" into a foot), e.g. 68 → 5' 8". */
+export function toFeetInches(totalIn: number, dp = 2): { ft: number; inch: number } {
+  const r = Math.round(totalIn * 10 ** dp) / 10 ** dp;
+  const ft = Math.floor(r / 12 + 1e-9);
+  return { ft, inch: Math.max(0, Math.round((r - ft * 12) * 10 ** dp) / 10 ** dp) };
+}
+
+/** Feet + inches (e.g. 5' 8") → total inches, decimal feet, mm, cm, m. Inches may be 12 or more; they are normalised. */
+export function feetInches(feet: number, inches: number) {
+  need(Number.isFinite(feet) && Number.isFinite(inches), "Enter feet and inches (use 0 for none).");
+  need(feet >= 0 && inches >= 0, "Feet and inches cannot be negative.");
+  const totalIn = feet * 12 + inches;
+  const mm = totalIn * MM_PER.in;
+  return { totalIn, decimalFt: totalIn / 12, mm, cm: mm / 10, m: mm / 1000, normalised: toFeetInches(totalIn) };
+}
+
+/* ───────────── 26 GST (including / excluding) ───────────── */
+
+export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40] as const;
+export type GstMode = "exclusive" | "inclusive";
+export type GstSupply = "intra" | "inter";
+
+/**
+ * Excluding GST: amount × qty is the taxable value and GST is added on top.
+ * Including GST: amount × qty already contains GST, so taxable = gross ÷ (1 + rate).
+ * Intra-state splits GST into equal CGST + SGST (SGST takes the odd paisa so the parts add up); inter-state is IGST.
+ * Everything is rounded to 2 decimals.
+ */
+export function gstCalc(amount: number, qty: number, ratePct: number, mode: GstMode, supply: GstSupply) {
+  need(Number.isFinite(amount) && amount >= 0, "Enter an amount of 0 or more.");
+  need(Number.isFinite(qty) && qty > 0, "Quantity must be more than 0.");
+  need(Number.isFinite(ratePct) && ratePct >= 0 && ratePct <= 100, "Choose a GST rate.");
+  const gross = amount * qty;
+  const taxable = round2(mode === "exclusive" ? gross : gross / (1 + ratePct / 100));
+  const tax = round2(mode === "exclusive" ? (taxable * ratePct) / 100 : gross - taxable);
+  const cgst = supply === "intra" ? round2(tax / 2) : 0;
+  const sgst = supply === "intra" ? round2(tax - cgst) : 0;
+  const igst = supply === "inter" ? tax : 0;
+  const total = round2(taxable + tax);
+  return { gross: round2(gross), taxable, tax, cgst, sgst, igst, total, unitTaxable: round2(taxable / qty), unitTotal: round2(total / qty), halfRate: ratePct / 2 };
+}
+
 /* ───────────── 20 work & travel hours ───────────── */
 
 export type Interval = { kind: "Work" | "Travel" | "Break"; start: string; end: string; id?: string };

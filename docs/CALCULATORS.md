@@ -23,13 +23,14 @@ Each calculator has its own link: `/technician#calculators/<id>`.
 | 16 | Electricity Cost | `electricity-cost` | Save |
 | 17 | AC Replacement Savings | `replacement-savings` | Save |
 | 18 | AMC Plan | `amc-plan` | Add to Estimate |
-| 19 | Unit Converter | `unit-converter` | Save |
+| 19 | Unit Converter (length mm·cm·m·inch·ft, Feet + Inch, mass, temp, pressure, cooling, airflow) | `unit-converter` | Save |
 | 20 | Work & Travel Hours | `work-hours` | Manual entries → time-correction approval |
 | 21 | Overtime Estimate | `overtime` | Save (amount only if salary is shared) |
 | 22 | Travel / Petrol Claim | `travel-claim` | Create Claim (Pending) |
 | 23 | Material Requirement | `material-requirement` | Request stock / request return |
 | 24 | Customer Bill | `customer-bill` | Save (never changes the invoice) |
 | 25 | Gas Weight & Price | `gas-weight-price` | Add to Estimate |
+| 26 | GST Calculator (including / excluding, CGST+SGST / IGST, live) | `gst` | Copy · WhatsApp |
 
 ## Rules
 
