@@ -23,9 +23,10 @@ describe("customer new-AC journey", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/When do you need/);
     expect(db().acQuotes ?? []).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Daikin" }));
-    fireEvent.click(screen.getByRole("button", { name: "Only unit price" }));
-    fireEvent.click(screen.getByRole("button", { name: "Immediate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preferred AC brands" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Daikin" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Price for" }), { target: { value: "Only unit price" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "When do you need it?" }), { target: { value: "Immediate" } });
     fireEvent.click(screen.getByRole("button", { name: "More ACs" }));
     fireEvent.click(screen.getByRole("button", { name: "Get Best AC Quote" }));
 

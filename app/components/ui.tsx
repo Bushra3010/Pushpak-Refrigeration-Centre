@@ -400,3 +400,48 @@ export function SectionHead({ title, onAll, allText = "See All" }: { title: stri
     </div>
   );
 }
+
+/** Single-choice dropdown (native select — the phone shows its own picker). */
+export function Dropdown<T extends string>({ label: l, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: readonly T[] }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <select aria-label={l} value={value} onChange={(e) => onChange(e.target.value as T)} style={{ ...field, appearance: "none", WebkitAppearance: "none", paddingRight: 38, fontWeight: 600, cursor: "pointer" }}>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <span aria-hidden style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", fontSize: 12, color: "var(--ink-soft)" }}>▼</span>
+    </div>
+  );
+}
+
+/** Pick-several dropdown: shows the picks; tap to open a checklist. */
+export function MultiDropdown<T extends string>({ label: l, value, onToggle, options, placeholder = "Select" }: { label: string; value: T[]; onToggle: (v: T) => void; options: readonly T[]; placeholder?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" aria-label={l} aria-expanded={open} onClick={() => setOpen(!open)} style={{ ...field, textAlign: "left", cursor: "pointer", fontWeight: 600, paddingRight: 38, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {value.length ? value.join(", ") : <span style={{ color: "var(--ink-mute)", fontWeight: 500 }}>{placeholder}</span>}
+      </button>
+      <span aria-hidden style={{ position: "absolute", right: 14, top: 16, pointerEvents: "none", fontSize: 12, color: "var(--ink-soft)" }}>{open ? "▲" : "▼"}</span>
+      {open && (
+        <div role="listbox" aria-multiselectable="true" style={{ marginTop: 6, background: "var(--surface)", border: "1.5px solid var(--line-strong)", borderRadius: 10, maxHeight: 260, overflowY: "auto", boxShadow: "var(--shadow-lg)" }}>
+          {options.map((o) => {
+            const on = value.includes(o);
+            return (
+              <label key={o} role="option" aria-selected={on} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--line)", fontSize: 14, cursor: "pointer", fontWeight: on ? 700 : 500 }}>
+                <input type="checkbox" checked={on} onChange={() => onToggle(o)} style={{ width: 18, height: 18, accentColor: "#111" }} /> {o}
+              </label>
+            );
+          })}
+          <button type="button" onClick={() => setOpen(false)} style={{ width: "100%", border: "none", background: "#111", color: "#fff", padding: 11, fontWeight: 700, fontSize: 13.5, cursor: "pointer", position: "sticky", bottom: 0 }}>Done</button>
+        </div>
+      )}
+    </div>
+  );
+}

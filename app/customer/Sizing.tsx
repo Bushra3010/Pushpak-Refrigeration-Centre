@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Chips, PrimaryButton, PageHeader, card, field, label, sectionTitle, small } from "../components/ui";
+import { Chips, Dropdown, MultiDropdown, PrimaryButton, PageHeader, card, field, label, sectionTitle, small } from "../components/ui";
 import { formatNum } from "../lib/calc/money";
 import { CITY_CLIMATE, estimateTonnage, type TonnageInput } from "../lib/calc/tonnage";
 import type { Customer, Db } from "../lib/data";
@@ -180,11 +180,11 @@ export function SizingPage({ db, me, onBack, onBook, onAccessories, flash }: { d
         ) : (
           <div style={{ ...card, padding: 14 }}>
             <p style={{ ...small, margin: "0 0 12px" }}>Tell us what you&apos;d like and we&apos;ll compare prices across brands for you — no obligation.</p>
-            <Q l="AC type"><Chips options={AC_TYPES} value={acType} onChange={setAcType} /></Q>
-            <Q l="Preferred AC brands" hint="Pick one or more"><Chips multi options={BRANDS} value={brands} onChange={toggleBrand} /></Q>
-            <Q l="AC capacity" hint={res.r?.recommendedTons != null ? `Your room needs about ${res.r.recommendedTons} Ton` : undefined}><Chips options={capOptions} value={capPicked} onChange={setCap} /></Q>
-            <Q l="Star rating"><Chips options={STARS} value={stars} onChange={setStars} /></Q>
-            <Q l="Inverter or non-inverter"><Chips options={INVERTER} value={inv} onChange={setInv} /></Q>
+            <Q l="AC type"><Dropdown label="AC type" options={AC_TYPES} value={acType} onChange={setAcType} /></Q>
+            <Q l="Preferred AC brands" hint="Pick one or more"><MultiDropdown label="Preferred AC brands" options={BRANDS} value={brands} onToggle={toggleBrand} placeholder="Select brands" /></Q>
+            <Q l="AC capacity" hint={res.r?.recommendedTons != null ? `Your room needs about ${res.r.recommendedTons} Ton` : undefined}><Dropdown label="AC capacity" options={capOptions} value={capPicked} onChange={setCap} /></Q>
+            <Q l="Star rating"><Dropdown label="Star rating" options={STARS} value={stars} onChange={setStars} /></Q>
+            <Q l="Inverter or non-inverter"><Dropdown label="Inverter or non-inverter" options={INVERTER} value={inv} onChange={setInv} /></Q>
             <Q l="No. of ACs">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => setQty(Math.max(1, qty - 1))} aria-label="Fewer ACs" style={stepBtn}>−</button>
@@ -192,8 +192,8 @@ export function SizingPage({ db, me, onBack, onBook, onAccessories, flash }: { d
                 <button onClick={() => setQty(Math.min(50, qty + 1))} aria-label="More ACs" style={stepBtn}>+</button>
               </div>
             </Q>
-            <Q l="Price for"><Chips options={PRICE} value={price} onChange={setPrice} /></Q>
-            <Q l="When do you need it?"><Chips options={TIMELINE} value={timeline} onChange={setTimeline} /></Q>
+            <Q l="Price for"><Dropdown label="Price for" options={PRICE} value={price} onChange={setPrice} /></Q>
+            <Q l="When do you need it?"><Dropdown label="When do you need it?" options={TIMELINE} value={timeline} onChange={setTimeline} /></Q>
 
             <span style={{ ...label, marginTop: 4 }}>Your details</span>
             <input aria-label="Your name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ ...field, marginBottom: 8 }} />
