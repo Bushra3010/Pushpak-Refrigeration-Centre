@@ -195,3 +195,42 @@ export function calculatePipeSet(pipes: PipeInput[], cost: PipeCostInput, extras
   };
 }
 
+
+/* ───────────── Copper pipe solver: wall / weight / length / price from whatever is known ───────────── */
+
+/** Wall thickness (mm) from OD, total weight and total length: solves (π/4)(OD² − (OD − 2t)²)·ρ·L = W. */
+export function wallFromWeight(odMm: number, totalWeightKg: number, totalLengthM: number, density = DEFAULT_COPPER_DENSITY): number {
+  if (!(odMm > 0)) throw new PipeInputError("Outside diameter must be greater than zero.");
+  if (!(totalWeightKg > 0)) throw new PipeInputError("Total weight must be greater than zero.");
+  if (!(totalLengthM > 0)) throw new PipeInputError("Total length must be greater than zero.");
+  const od = mmToM(odMm);
+  const area = totalWeightKg / (density * totalLengthM); // metal cross-section, m²
+  const solidArea = (Math.PI / 4) * od * od;
+  if (area >= solidArea) throw new PipeInputError("This weight is more than a solid copper rod of that OD and length — check the inputs.");
+  const id = Math.sqrt(od * od - (4 * area) / Math.PI);
+  return ((od - id) / 2) * 1000;
+}
+
+/** Total length (m) from OD, wall thickness and total weight. */
+export function lengthFromWeight(odMm: number, wallMm: number, totalWeightKg: number, density = DEFAULT_COPPER_DENSITY): number {
+  if (!(odMm > 0)) throw new PipeInputError("Outside diameter must be greater than zero.");
+  if (!(wallMm > 0) || 2 * wallMm >= odMm) throw new PipeInputError("Wall thickness must be greater than zero and less than half the OD.");
+  if (!(totalWeightKg > 0)) throw new PipeInputError("Total weight must be greater than zero.");
+  return totalWeightKg / kgPerMetre(odMm, odMm - 2 * wallMm, density);
+}
+
+/** Nearest gauge in a standard for a wall thickness, with the difference in mm. */
+export function nearestGauge(wallMm: number, sizes: { gauge: string; mm: number }[]) {
+  if (!sizes.length) return null;
+  const best = sizes.reduce((a, b) => (Math.abs(b.mm - wallMm) < Math.abs(a.mm - wallMm) ? b : a));
+  return { ...best, diffMm: wallMm - best.mm };
+}
+
+export type RateBasis = "kg" | "m" | "ft";
+
+/** Price from a rate per kg, per metre or per foot. Weight and length are the totals being priced. */
+export function pipePrice(rate: number, basis: RateBasis, totalWeightKg: number, totalLengthM: number) {
+  if (!(rate >= 0)) throw new PipeInputError("Rate cannot be negative.");
+  const qty = basis === "kg" ? totalWeightKg : basis === "m" ? totalLengthM : totalLengthM / M_PER_FOOT;
+  return { qty, unit: basis === "kg" ? "kg" : basis, amount: round2(qty * rate) };
+}

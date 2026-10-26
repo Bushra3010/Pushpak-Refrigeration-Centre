@@ -1,4 +1,4 @@
-/* The 26 technician calculators: id (also the route, /technician#calculators/<id>), card text and which
+/* The 27 technician calculators: id (also the route, /technician#calculators/<id>), card text and which
  * actions they offer. "estimate" = Add to Estimate · "readings" = Save Readings to Job · "claim" =
  * Create Claim · "time" = follows the time-approval workflow · "save" = save only. */
 
@@ -37,6 +37,7 @@ export const TOOLS: ToolDef[] = [
   d(24, "customer-bill", "Customer Bill Calculator", "🧾", "Daily Work & Billing", "save", "Final bill, GST breakdown, paid and balance.", "bill invoice balance payment gst total"),
   d(25, "gas-weight-price", "Gas Weight & Price", "🧮", "Service & Diagnostics", "estimate", "Grams of gas → price, or customer budget → grams to give.", "gas refrigerant weight grams price rupees budget rate kg loose top up"),
   d(26, "gst", "GST Calculator", "％", "Daily Work & Billing", "save", "Including / excluding GST, CGST + SGST or IGST — updates as you type.", "gst tax cgst sgst igst inclusive exclusive including excluding invoice"),
+  d(27, "copper-solver", "Copper Pipe Solver", "📐", "Installation & Quotation", "estimate", "Find wall thickness / gauge, total weight, total length or price per kg · ft · m.", "copper wall thickness gauge swg weight length price per kg foot metre od"),
 ];
 
 export const toolById = (id: string) => TOOLS.find((t) => t.id === id);

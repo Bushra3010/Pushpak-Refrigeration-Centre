@@ -4,7 +4,7 @@ import {
   gasWeightPrice, ptLookup, quoteTotals, refrigerantCharge, refrigerantUsage, replacementSavings, standCheck, summariseIntervals, superheatSubcool, toAbsKpa, travelClaim,
   type ChargeRule,
 } from "@/app/lib/calc/tools";
-import { calculatePipe } from "@/app/lib/calc/pipe";
+import { calculatePipe, kgPerMetre, lengthFromWeight, nearestGauge, pipePrice, wallFromWeight } from "@/app/lib/calc/pipe";
 import { priceFromMargin, priceFromMarkup } from "@/app/lib/calc/money";
 import type { PtDataset, TravelPolicy } from "@/app/lib/tool-settings";
 
@@ -89,6 +89,19 @@ describe("more units: area, volume, weight, vacuum, power, energy, airflow, spee
     expect(find(convert("velocity", 1, "m/s"), "ft/min")).toBeCloseTo(196.85, 2);
     expect(find(convert("time", 1.5, "h"), "min")).toBe(90);
     expect(Object.fromEntries(convertLength(1, "mile").map((r) => [r.unit, r.value])).km).toBeCloseTo(1.609344, 9);
+  });
+});
+
+describe("copper pipe solver", () => {
+  it("wall ↔ weight ↔ length round-trip, nearest gauge, price per kg/m/ft", () => {
+    const od = 9.525, wall = 0.8128; // 3/8" × 0.032"
+    const kgM = kgPerMetre(od, od - 2 * wall);
+    expect(wallFromWeight(od, kgM * 15, 15)).toBeCloseTo(wall, 6);
+    expect(lengthFromWeight(od, wall, kgM * 15)).toBeCloseTo(15, 9);
+    expect(nearestGauge(0.81, [{ gauge: "20", mm: 0.9144 }, { gauge: "21", mm: 0.8128 }])!.gauge).toBe("21");
+    expect(pipePrice(850, "kg", 2, 10).amount).toBe(1700);
+    expect(pipePrice(100, "ft", 2, 3.048).qty).toBeCloseTo(10, 9);
+    expect(() => wallFromWeight(od, 1000, 1)).toThrow(/solid/);
   });
 });
 

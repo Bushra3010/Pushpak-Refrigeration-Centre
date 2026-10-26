@@ -31,6 +31,7 @@ Each calculator has its own link: `/technician#calculators/<id>`.
 | 24 | Customer Bill | `customer-bill` | Save (never changes the invoice) |
 | 25 | Gas Weight & Price | `gas-weight-price` | Add to Estimate |
 | 26 | GST Calculator (including / excluding, CGST+SGST / IGST, live) | `gst` | Copy · WhatsApp |
+| 27 | Copper Pipe Solver (wall / gauge, total weight, total length, price per kg · ft · m) | `copper-solver` | Add to Estimate |
 
 ## Rules
 
