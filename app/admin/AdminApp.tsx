@@ -19,9 +19,10 @@ import { CalculatorsSection, CostRulesSection } from "./Calculators";
 import { ExpensesSection, TimeSheetsSection } from "./Expenses";
 import { PayrollSection } from "./Payroll";
 import { ProfitSection, TechProfitSection } from "./Profit";
+import { RepairsSection } from "./Repairs";
 
 export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
-  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules";
+  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -30,6 +31,7 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "customers", label: "Customers", icon: "👥", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "acs", label: "AC Assets", icon: "❄️", roles: ["Admin", "Service Coordinator"] },
     { id: "technicians", label: "Technicians", icon: "🧑‍🔧", roles: ["Admin", "Service Coordinator"] },
+    { id: "repairs", label: "Repair Register", icon: "🔌", roles: ["Admin", "Service Coordinator", "Accounts"] },
   ] },
   { group: "Money", items: [
     { id: "quotations", label: "Quotations", icon: "📝", roles: ["Admin", "Service Coordinator", "Accounts"] },
@@ -62,6 +64,7 @@ const TITLES: Record<Section, string> = {
   reports: "Reports", notifications: "Notifications", audit: "Audit Log", settings: "Settings & Pricing",
   profit: "Profit Dashboard", techprofit: "Technician Profitability", payroll: "Payroll & Salary", expenses: "Expenses & Claims",
   timesheets: "Time Sheets", calculators: "Copper Pipe & Tonnage Calculators", costrules: "Cost & Calculation Rules",
+  repairs: "Repair Register — PCB Board · Stabilizer · Indoor Coil",
 };
 
 const SESSION_KEY = "prc:admin";
@@ -114,6 +117,7 @@ export default function AdminApp() {
     customers: db.customers.filter((c) => !c.mergedInto && db.customers.some((o) => o.id !== c.id && !o.mergedInto && o.name.toLowerCase() === c.name.toLowerCase())).length,
     timesheets: db.timeLogs.filter((l) => l.status === "Submitted").length + db.corrections.filter((c) => c.status === "Pending").length,
     expenses: db.expenses.filter((e) => e.status === "Pending").length,
+    repairs: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length,
   };
 
   const sidebar = (
@@ -204,6 +208,7 @@ export default function AdminApp() {
             {current === "expenses" && <ExpensesSection db={db} who={who} notify={notify} />}
             {current === "timesheets" && <TimeSheetsSection db={db} who={who} notify={notify} />}
             {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
+            {current === "repairs" && <RepairsSection db={db} who={who} notify={notify} />}
             {current === "costrules" && <CostRulesSection key={JSON.stringify(db.fin)} db={db} who={who} notify={notify} />}
 
             <p style={{ margin: "28px 0 0", textAlign: "center", fontSize: 11.5, color: "var(--ink-mute)" }}>Pushpak workspace · Demo data shared across apps in this browser</p>

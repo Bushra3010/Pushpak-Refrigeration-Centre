@@ -71,9 +71,9 @@ export function TechLogin({ db, onDone }: { db: Db; onDone: (techId: string) => 
 type JobTab = "today" | "upcoming" | "done";
 const ACTIVE = (j: Job) => isOpen(j) || (j.status === "Invoiced");
 
-export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSearch, onCalc, onStock }: {
+export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSearch, onCalc, onStock, onRepairs }: {
   db: Db; tech: Technician; unread: number; onOpen: (id: string) => void; onBell: () => void; onToggleDuty: (on: boolean) => void;
-  onSearch?: () => void; onCalc?: (id?: string) => void; onStock?: () => void;
+  onSearch?: () => void; onCalc?: (id?: string) => void; onStock?: () => void; onRepairs?: () => void;
 }) {
   const [tab, setTab] = useState<JobTab>("today");
   const mine = db.jobs.filter((j) => j.techId === tech.id || (j.helpers ?? []).includes(tech.id));
@@ -107,6 +107,7 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSe
           { icon: "🧮", label: "All Calculators", onClick: () => onCalc() },
           { icon: "％", label: "GST Calculator", onClick: () => onCalc("gst") },
           { icon: "📏", label: "Unit Converter", onClick: () => onCalc("unit-converter") },
+          ...(onRepairs ? [{ icon: "🔌", label: "Repair Register", onClick: onRepairs, count: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length }] : []),
           ...(onSearch ? [{ icon: "👥", label: "My Customers", onClick: onSearch }] : []),
           ...(onStock ? [{ icon: "📦", label: "Van Stock", onClick: onStock }] : []),
         ]} />

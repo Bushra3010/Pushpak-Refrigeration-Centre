@@ -17,6 +17,7 @@ import {
 import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { upgradeDb, withFinanceSeed } from "./finance-seed";
+import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
 
 const KEY = "prc:db:v1";
 const fresh = () => withFinanceSeed(seedDb());
@@ -856,4 +857,59 @@ export function requestReturn(techId: string, items: Record<string, number>, job
     if (!list.length) return;
     notify(d, "admin", `Return request · ${techName(d, techId)}`, `${list.join(", ")}${jobId ? ` (from ${jobId})` : ""} — confirm in Parts & Inventory`);
   });
+}
+
+/* ───────────────────────── Repair register (PCB / stabilizer / coil) ───────────────────────── */
+
+export function addRepair(draft: RepairDraft, by: string): { id: string } | { error: string } {
+  const err = validateRepair(draft);
+  if (err) return { error: err };
+  let id = "";
+  mutate((d) => {
+    d.repairs ??= [];
+    const phone = draft.customerPhone.replace(/\D/g, "");
+    const cust = d.customers.find((c) => c.phone === phone && !c.mergedInto);
+    id = `R-${d.repairs.reduce((m, r) => Math.max(m, Number(r.id.slice(2)) || 100), 100) + 1}`;
+    const now = nowIso();
+    const entry: RepairEntry = { ...draft, customerPhone: phone, customerId: draft.customerId ?? cust?.id ?? null, id, createdAt: now, status: "Received", pendingReason: "", delayReason: "", timeline: [{ at: now, status: "Received", by }] };
+    d.repairs.unshift(entry);
+    d.notifications.unshift({ id: uid(), at: now, to: "admin", title: `Repair item received · ${id}`, body: `${entry.itemType} · ${entry.brand} · ${entry.customerName} (${entry.mode})`, read: false });
+    audit(d, by, "Repair entry created", `${id} · ${entry.itemType} · ${entry.customerName}`);
+  });
+  return { id };
+}
+
+export function updateRepair(id: string, patch: Partial<RepairDraft>, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const r = d.repairs?.find((x) => x.id === id);
+    if (!r) { err = "Entry not found."; return; }
+    const next = { ...r, ...patch };
+    err = validateRepair(next);
+    if (err) return;
+    Object.assign(r, patch);
+    audit(d, by, "Repair entry edited", `${id} · ${Object.keys(patch).join(", ")}`);
+  });
+  return err;
+}
+
+/** Status change with the pending / delay reasons and return date the register needs. */
+export function setRepairStatus(id: string, status: RepairStatus, info: { note?: string; pendingReason?: string; delayReason?: string; returnDate?: string | null; charge?: number | null }, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const r = d.repairs?.find((x) => x.id === id);
+    if (!r) { err = "Entry not found."; return; }
+    if (status === "Pending" && !(info.pendingReason ?? r.pendingReason).trim()) { err = "Give the reason the repair is pending."; return; }
+    if (status === "Returned" && !(info.returnDate ?? r.returnDate)) { err = "Enter the return date."; return; }
+    r.status = status;
+    if (info.pendingReason != null) r.pendingReason = info.pendingReason;
+    if (info.delayReason != null) r.delayReason = info.delayReason;
+    if (info.returnDate !== undefined) r.returnDate = info.returnDate;
+    if (info.charge !== undefined) r.charge = info.charge;
+    r.timeline.push({ at: nowIso(), status, by, note: info.note?.trim() || undefined });
+    if (r.customerId && (status === "Repaired" || status === "Returned"))
+      d.notifications.unshift({ id: uid(), at: nowIso(), to: `customer:${r.customerId}`, title: status === "Repaired" ? `Your ${r.itemType} is repaired` : `Your ${r.itemType} has been returned`, body: `${r.id} · ${r.brand}${r.charge != null ? ` · ${inr(r.charge)}` : ""}`, read: false });
+    audit(d, by, "Repair status", `${id} → ${status}${info.note ? ` · ${info.note}` : ""}`);
+  });
+  return err;
 }

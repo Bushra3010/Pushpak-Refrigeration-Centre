@@ -4,8 +4,9 @@ import type { Db } from "@/app/lib/data";
 import { addMonths, currentMonth } from "@/app/lib/finance";
 import {
   addExpense, approvePayroll, logCallback, reimburseExpense, requestCorrection, resetDemo, reviewCorrection, reviewExpense, reviewTime, saveCalc,
-  savePayroll, setJobSplit, setJobTeam, timerAction,
+  savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
 } from "@/app/lib/store";
+import { emptyDraft } from "@/app/components/repair";
 
 const db = (): Db => JSON.parse(localStorage.getItem("prc:db:v1")!);
 beforeAll(() => resetDemo());
@@ -85,5 +86,28 @@ describe("jobs: team, split, callback, calculator lines", () => {
     expect(db().jobs.find((j) => j.id === "J-1045")!.lines.some((l) => l.id === "x1")).toBe(true);
     expect(db().parts.map((p) => p.stock)).toEqual(stock);
     expect(saveCalc({ kind: "Copper pipe", title: "t", customerId: null, jobId: "J-1036", by: "Admin", inputs: {}, outputs: {} }, [{ id: "x2", kind: "Material", name: "x", qty: 1, price: 1 }])).toMatch(/before the estimate is approved/);
+  });
+});
+
+describe("repair register", () => {
+  it("seeded, validates, links a known customer, and tracks status with reasons", () => {
+    expect(db().repairs!.length).toBeGreaterThanOrEqual(4);
+    const bad = addRepair({ ...emptyDraft("Rohit Kumar", "Technician"), customerName: "X" }, "Rohit Kumar");
+    expect("error" in bad && bad.error).toMatch(/mobile/);
+    const ok = addRepair({ ...emptyDraft("Rohit Kumar", "Technician"), customerName: "Rajesh Sharma", customerPhone: "9876543210", brand: "Daikin", issue: "No display", mode: "Out Source", vendor: { name: "Sharma Electronics", phone: "", sentDate: "2026-10-26", expectedDate: "2026-10-30", charge: null } }, "Rohit Kumar");
+    expect("id" in ok).toBe(true);
+    const id = (ok as { id: string }).id;
+    const r = () => db().repairs!.find((x) => x.id === id)!;
+    expect(r().customerId).toBe("c1");
+    expect(r().status).toBe("Received");
+    expect(setRepairStatus(id, "Pending", { pendingReason: "" }, "Shop Staff")).toMatch(/reason/);
+    expect(setRepairStatus(id, "Pending", { pendingReason: "Waiting for IC", delayReason: "Part not in stock" }, "Shop Staff")).toBeNull();
+    expect(r().pendingReason).toBe("Waiting for IC");
+    expect(setRepairStatus(id, "Returned", { returnDate: null }, "Shop Staff")).toMatch(/return date/);
+    expect(setRepairStatus(id, "Returned", { returnDate: "2026-10-31", charge: 2500 }, "Rohit Kumar")).toBeNull();
+    expect(r().timeline.map((e) => e.status)).toEqual(["Received", "Pending", "Returned"]);
+    expect(db().notifications.some((n) => n.to === "customer:c1" && n.title.includes("returned"))).toBe(true);
+    expect(updateRepair(id, { brand: "" }, "Shop Staff")).toMatch(/brand/);
+    expect(updateRepair(id, { brand: "Daikin Inverter" }, "Shop Staff")).toBeNull();
   });
 });

@@ -7,6 +7,7 @@
 
 /* ───────────────────────── Types ───────────────────────── */
 
+import type { RepairEntry } from "./repair";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -311,6 +312,8 @@ export interface Db {
   acQuotes?: AcQuoteRequest[];
   /** technician Calculators hub: favourites & recently used, per technician */
   techPrefs?: Record<string, { fav: string[]; recent: string[] }>;
+  /** PCB / stabilizer / coil repair register (app/lib/repair.ts) */
+  repairs?: RepairEntry[];
   /** saved-data schema version (see upgradeDb) */
   version?: number;
 }
