@@ -73,6 +73,25 @@ describe("length: every unit, feet + inches", () => {
   });
 });
 
+describe("more units: area, volume, weight, vacuum, power, energy, airflow, speed", () => {
+  const find = (rows: { unit: string; value: number }[], u: string) => rows.find((r) => r.unit === u)!.value;
+  it("tables", () => {
+    expect(find(convert("area", 100, "sq ft"), "m²")).toBeCloseTo(9.2903, 4);
+    expect(find(convert("volume", 1, "gal (US)"), "L")).toBeCloseTo(3.7854, 4);
+    expect(find(convert("mass", 1, "lb"), "g")).toBeCloseTo(453.592, 3);
+    expect(find(convert("temp", 25, "°C"), "K")).toBeCloseTo(298.15, 9);
+    expect(find(convert("pressure", 1, "bar"), "kg/cm²")).toBeCloseTo(1.01972, 5);
+    expect(find(convert("vacuum", 500, "micron"), "Pa")).toBeCloseTo(66.66, 2);
+    expect(find(convert("power", 1, "HP"), "W")).toBeCloseTo(745.7, 1);
+    expect(find(convert("cooling", 1, "TR"), "kcal/h")).toBeCloseTo(3024, 0);
+    expect(find(convert("energy", 1, "kWh"), "MJ")).toBeCloseTo(3.6, 9);
+    expect(find(convert("airflow", 1, "L/s"), "m³/h")).toBeCloseTo(3.6, 9);
+    expect(find(convert("velocity", 1, "m/s"), "ft/min")).toBeCloseTo(196.85, 2);
+    expect(find(convert("time", 1.5, "h"), "min")).toBe(90);
+    expect(Object.fromEntries(convertLength(1, "mile").map((r) => [r.unit, r.value])).km).toBeCloseTo(1.609344, 9);
+  });
+});
+
 describe("GST calculator", () => {
   it("excluding: GST added on top, CGST + SGST halves", () => {
     const r = gstCalc(10000, 2, 18, "exclusive", "intra");

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { ATM_KPA, LENGTH_UNITS, MM_PER, ToolError, convert, convertLength, electricityCost, feetInches, toFeetInches, type LengthU, quoteTotals, replacementSavings, type ConvKind, type QLine } from "../../lib/calc/tools";
+import { ATM_KPA, CONV_UNITS, LENGTH_UNITS, MM_PER, ToolError, convert, convertLength, electricityCost, feetInches, toFeetInches, type LengthU, quoteTotals, replacementSavings, type ConvKind, type QLine } from "../../lib/calc/tools";
 import { AC_TYPES } from "../../lib/data";
 import { Box, CalcShell, Check, F, Note, Sel, Two, fmt, num, rs, useCalc, type Ctx, type Result } from "./kit";
 import { gstPct, quoteRows, rateOf, toLines } from "./install";
@@ -100,19 +100,27 @@ export function AmcPlan({ ctx }: { ctx: Ctx }) {
 /* ───────────── 19 Unit converter ───────────── */
 
 type Kind = ConvKind | "length" | "ft-in";
+const U = (k: ConvKind) => [...(CONV_UNITS[k] ?? [])];
 const KINDS: [Kind, string, string[]][] = [
-  ["length", "Length: mm · cm · m · inch · feet", [...LENGTH_UNITS]],
+  ["length", "Length: mm · cm · m · inch · feet · yard · km · mile", [...LENGTH_UNITS]],
   ["ft-in", "Feet + Inch (5' 8\") → mm · cm · m · decimal ft", []],
-  ["mass", "Kilograms ↔ grams", ["kg", "g"]],
-  ["temp", "Celsius ↔ Fahrenheit", ["°C", "°F"]],
-  ["pressure", "Pressure: bar · psi · kPa", ["psi", "bar", "kPa", "MPa"]],
-  ["cooling", "Cooling: BTU/h · kW cooling · TR", ["BTU/h", "kW cooling", "TR"]],
-  ["airflow", "Airflow: CFM ↔ m³/h", ["CFM", "m³/h"]],
+  ["area", "Area: sq ft · sq m · sq yd (room size)", U("area")],
+  ["volume", "Volume: litre · mL · m³ · ft³ · gallon", U("volume")],
+  ["mass", "Weight: kg · g · lb · oz (gas cylinders)", U("mass")],
+  ["temp", "Temperature: °C · °F · K", U("temp")],
+  ["pressure", "Pressure: psi · bar · kPa · kg/cm² · mmHg", U("pressure")],
+  ["vacuum", "Vacuum: micron · Pa · mbar · Torr · inHg", U("vacuum")],
+  ["cooling", "Cooling: BTU/h · kW · TR · kcal/h", U("cooling")],
+  ["power", "Electrical power: W · kW · HP · BTU/h", U("power")],
+  ["energy", "Energy: kWh (unit) · Wh · MJ · kcal · BTU", U("energy")],
+  ["airflow", "Airflow: CFM · m³/h · L/s · m³/min", U("airflow")],
+  ["velocity", "Air speed: m/s · ft/min · km/h", U("velocity")],
+  ["time", "Time: seconds · minutes · hours · days", U("time")],
 ];
 
-const LEN_NAME: Record<LengthU, string> = { mm: "Millimetres (mm)", cm: "Centimetres (cm)", m: "Metres (m)", in: "Inches (in)", ft: "Feet (ft)" };
-const LEN_SHORT: Record<LengthU, string> = { mm: "mm", cm: "cm", m: "m", in: "inch", ft: "ft" };
-const LEN_DP: Record<LengthU, number> = { mm: 2, cm: 3, m: 4, in: 3, ft: 4 };
+const LEN_NAME: Record<LengthU, string> = { mm: "Millimetres (mm)", cm: "Centimetres (cm)", m: "Metres (m)", in: "Inches (in)", ft: "Feet (ft)", yd: "Yards (yd)", km: "Kilometres (km)", mile: "Miles" };
+const LEN_SHORT: Record<LengthU, string> = { mm: "mm", cm: "cm", m: "m", in: "inch", ft: "ft", yd: "yd", km: "km", mile: "mile" };
+const LEN_DP: Record<LengthU, number> = { mm: 2, cm: 3, m: 4, in: 3, ft: 4, yd: 4, km: 6, mile: 6 };
 const ftIn = (totalIn: number) => { const { ft, inch } = toFeetInches(totalIn); return `${ft}' ${fmt(inch, 2)}"`; };
 const stepText = (s: { op: string; factor: number }) => `${s.op} ${fmt(s.factor, 6)}`;
 
@@ -137,12 +145,43 @@ function LengthReference() {
   );
 }
 
+/** From → To quick answer, computed live as the user types (the full table still comes from Calculate). */
+function quickResult(v: { kind: Kind; from: string; to: string; value: string; basis: "gauge" | "absolute"; atm: string }): { value: number; unit: string } | null {
+  if (v.kind === "ft-in" || !v.to || v.value.trim() === "") return null;
+  try {
+    if (v.kind === "length") {
+      const from = v.from as LengthU;
+      const val = from === "in" ? (parseInches(v.value) ?? NaN) : num(v.value);
+      if (v.to === from) return { value: val, unit: v.to };
+      const r = convertLength(val, from).find((x) => x.unit === v.to);
+      return r ? { value: r.value, unit: r.unit } : null;
+    }
+    if (v.to === v.from) return { value: num(v.value), unit: v.to };
+    const r = convert(v.kind, num(v.value), v.from, { basis: v.basis, atmKpa: num(v.atm) }).find((x) => x.unit === v.to);
+    return r ? { value: r.value, unit: r.unit } : null;
+  } catch { return null; }
+}
+
+function QuickResult({ r, flash }: { r: { value: number; unit: string } | null; flash: (m: string) => void }) {
+  if (!r || !Number.isFinite(r.value)) return null;
+  const text = r.value.toLocaleString("en-IN", { maximumFractionDigits: 6 });
+  return (
+    <div style={{ background: "#111", color: "#fff", borderRadius: 12, padding: "12px 14px", margin: "4px 0 10px" }}>
+      <p style={{ margin: 0, fontSize: 12, color: "#bdbdbd" }}>Converted Result</p>
+      <p style={{ margin: "2px 0 0", fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{text}</p>
+      <p style={{ margin: 0, fontSize: 13, color: "#d6d6d6" }}>{r.unit}</p>
+      <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${text} ${r.unit}`); flash("Copied"); } catch { flash("⚠ Could not copy"); } }}
+        className="press" style={{ marginTop: 10, width: "100%", border: "1.5px solid #444", background: "transparent", color: "#fff", borderRadius: 8, padding: "9px 0", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>⧉ Copy Result</button>
+    </div>
+  );
+}
+
 export function UnitConverter({ ctx }: { ctx: Ctx }) {
-  const init = { kind: "pressure" as Kind, from: "psi", value: "", ft: "", inch: "", basis: "gauge" as "gauge" | "absolute", atm: String(ATM_KPA) };
+  const init = { kind: "pressure" as Kind, from: "psi", to: "bar", value: "", ft: "", inch: "", basis: "gauge" as "gauge" | "absolute", atm: String(ATM_KPA) };
   const calc = useCalc(init, (v): Result => {
     if (v.kind === "length") {
       const from = v.from as LengthU;
-      const value = num(v.value);
+      const value = from === "in" ? (parseInches(v.value) ?? NaN) : num(v.value);
       const rows = convertLength(value, from);
       const totalIn = (value * MM_PER[from]) / MM_PER.in;
       return {
@@ -183,20 +222,36 @@ export function UnitConverter({ ctx }: { ctx: Ctx }) {
       };
     }
     const rows = convert(v.kind, num(v.value), v.from, { basis: v.basis, atmKpa: num(v.atm) });
-    const dp = (u: string) => (u === "TR" || u === "kg" || u === "in" ? 4 : u === "BTU/h" ? 0 : 3);
+    const dp = (u: string) => (u === "TR" || u === "kg" || u === "in" || u === "MPa" || u === "atm" ? 4 : u === "BTU/h" || u === "micron" || u === "Pa" ? 0 : 3);
     return {
       summary: [{ k: "Input", v: `${v.value} ${v.from}${v.kind === "pressure" ? ` (${v.basis})` : ""}` }, ...rows.map((r) => ({ k: r.unit, v: fmt(r.value, dp(r.unit)) }))],
-      assumptions: v.kind === "cooling" ? ["kW here is COOLING (thermal) capacity, not electrical input. 1 TR = 12,000 BTU/h; 1 kW = 3,412.14 BTU/h."] : v.kind === "pressure" ? [`Same basis in and out (${v.basis}); the last row converts ${v.basis === "gauge" ? "gauge → absolute" : "absolute → gauge"} using ${v.atm} kPa atmosphere.`] : ["Exact conversion factors (1 kg = 1000 g, °F = °C × 1.8 + 32, 1 CFM = 1.699 m³/h)."],
+      assumptions: v.kind === "cooling" ? ["kW here is COOLING (thermal) capacity, not electrical input. 1 TR = 12,000 BTU/h = 3,024 kcal/h; 1 kW = 3,412.14 BTU/h."]
+        : v.kind === "pressure" ? [`Same basis in and out (${v.basis}); the last row converts ${v.basis === "gauge" ? "gauge → absolute" : "absolute → gauge"} using ${v.atm} kPa atmosphere.`, "1 bar = 14.5038 psi = 1.01972 kg/cm²; 1 atm = 101.325 kPa."]
+        : v.kind === "vacuum" ? ["1 micron = 1 mTorr = 0.1333 Pa. A good evacuation holds below 500 microns."]
+        : v.kind === "power" ? ["Electrical power only. 1 HP = 745.7 W; 1 kW = 3,412.14 BTU/h."]
+        : v.kind === "energy" ? ["1 electricity unit = 1 kWh = 3.6 MJ = 860 kcal = 3,412 BTU."]
+        : v.kind === "mass" ? ["1 lb = 453.592 g; 1 oz = 28.35 g. Refrigerant cylinders are often marked in lb."]
+        : v.kind === "area" ? ["1 sq ft = 0.0929 m²; 1 sq yd = 9 sq ft. Room area = length × width."]
+        : v.kind === "volume" ? ["1 litre = 1000 mL; 1 m³ = 1000 L; 1 US gallon = 3.785 L; 1 UK gallon = 4.546 L."]
+        : v.kind === "velocity" ? ["1 m/s = 196.85 ft/min = 3.6 km/h."]
+        : ["Exact conversion factors (°F = °C × 1.8 + 32; K = °C + 273.15; 1 CFM = 1.699 m³/h; 1 L/s = 3.6 m³/h)."],
       outputs: rows,
     };
   });
   const { v, set } = calc;
   const units = KINDS.find((k) => k[0] === v.kind)![2];
+  const unitOpts = v.kind === "length" ? LENGTH_UNITS.map((u) => [u, LEN_SHORT[u]] as [string, string]) : units;
+  const pick = (x: Kind) => { const u = KINDS.find((k) => k[0] === x)![2]; set({ kind: x, from: u[0] ?? "", to: u[1] ?? "" }); };
   return <CalcShell ctx={ctx} calc={calc} form={<Box>
-    <Sel l="Convert" value={v.kind} onChange={(x) => set({ kind: x, from: KINDS.find((k) => k[0] === x)![2][0] ?? "" })} options={KINDS.map(([k, l]) => [k, l] as [Kind, string])} />
+    <Sel l="Convert" value={v.kind} onChange={pick} options={KINDS.map(([k, l]) => [k, l] as [Kind, string])} />
     {v.kind === "ft-in"
       ? <Two><F l="Feet" unit="ft" value={v.ft} onChange={(x) => set({ ft: x })} placeholder="5" /><F l="Inches" unit="inch" type="text" value={v.inch} onChange={(x) => set({ inch: x })} placeholder="8 or 8 1/2" /></Two>
-      : <Two><F l="Value" value={v.value} onChange={(x) => set({ value: x })} /><Sel l="From" value={v.from} onChange={(x) => set({ from: x })} options={v.kind === "length" ? LENGTH_UNITS.map((u) => [u, LEN_SHORT[u]] as [string, string]) : units} /></Two>}
+      : <>
+        <F l="Enter value" type={v.kind === "length" && v.from === "in" ? "text" : "decimal"} value={v.value} onChange={(x) => set({ value: x })} placeholder={v.kind === "length" && v.from === "in" ? "3/8 or 15" : undefined} />
+        <Two><Sel l="From" value={v.from} onChange={(x) => set({ from: x })} options={unitOpts} /><Sel l="To" value={v.to} onChange={(x) => set({ to: x })} options={unitOpts} /></Two>
+        <QuickResult r={quickResult(v)} flash={ctx.flash} />
+        <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "var(--ink-mute)" }}>Tap Calculate for every unit at once with the working.</p>
+      </>}
     {v.kind === "pressure" && <Two><Sel l="Basis" value={v.basis} onChange={(x) => set({ basis: x })} options={[["gauge", "Gauge"], ["absolute", "Absolute"]]} /><F l="Atmosphere" unit="kPa" value={v.atm} onChange={(x) => set({ atm: x })} /></Two>}
     {v.kind === "cooling" && <Note>Cooling kW ≠ electrical input kW.</Note>}
     {(v.kind === "length" || v.kind === "ft-in") && <LengthReference />}

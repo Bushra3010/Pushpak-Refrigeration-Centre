@@ -209,7 +209,7 @@ export function gasWeightPrice(mode: "weight" | "price", ratePerKg: number, valu
 /* ───────────── pressure units ───────────── */
 
 export const ATM_KPA = 101.325;
-export const KPA_PER = { kPa: 1, bar: 100, psi: 6.894757293168, MPa: 1000 } as const;
+export const KPA_PER = { kPa: 1, bar: 100, psi: 6.894757293168, MPa: 1000, "kg/cm²": 98.0665, mbar: 0.1, atm: 101.325, mmHg: 0.133322387415, inHg: 3.38638866667 } as const;
 export type PUnit = keyof typeof KPA_PER;
 export const toKpa = (v: number, u: PUnit) => v * KPA_PER[u];
 export const fromKpa = (kpa: number, u: PUnit) => kpa / KPA_PER[u];
@@ -335,7 +335,31 @@ export function replacementSavings(oldKwhYr: number, newKwhYr: number, tariff: n
 /* ───────────── 19 unit conversion ───────────── */
 
 export const BTUH_PER_KW_COOLING = 3412.142;
-export type ConvKind = "length-ft-m" | "length-in-mm" | "mass" | "temp" | "pressure" | "cooling" | "airflow";
+export type ConvKind = "length-ft-m" | "length-in-mm" | "mass" | "temp" | "pressure" | "cooling" | "airflow" | "area" | "volume" | "vacuum" | "power" | "energy" | "velocity" | "time";
+
+/* Factor tables: value in the first (base) unit per 1 of each unit. All exact or NIST values. */
+export const AREA_PER_M2 = { "m²": 1, "sq ft": 0.09290304, "sq yd": 0.83612736, "sq in": 0.00064516, "cm²": 0.0001 } as const;
+export const LITRE_PER = { L: 1, mL: 0.001, "m³": 1000, "ft³": 28.316846592, "gal (US)": 3.785411784, "gal (UK)": 4.54609 } as const;
+export const G_PER = { kg: 1000, g: 1, lb: 453.59237, oz: 28.349523125 } as const;
+/** Vacuum: 1 micron = 1 mTorr = 0.133322 Pa. */
+export const PA_PER = { micron: 0.133322387415, Pa: 1, mbar: 100, Torr: 133.322387415, inHg: 3386.38866667, kPa: 1000 } as const;
+export const W_PER = { W: 1, kW: 1000, HP: 745.69987158, "BTU/h": 0.29307107, "kcal/h": 1.163 } as const;
+export const KWH_PER = { kWh: 1, "unit (kWh)": 1, Wh: 0.001, MJ: 1 / 3.6, kcal: 0.001163, BTU: 0.00029307107 } as const;
+export const MS_PER = { "m/s": 1, "ft/min": 0.00508, "km/h": 1 / 3.6, "ft/s": 0.3048 } as const;
+export const S_PER = { s: 1, min: 60, h: 3600, day: 86400, week: 604800 } as const;
+export const M3H_PER = { "m³/h": 1, CFM: 1.6990108, "L/s": 3.6, "m³/min": 60 } as const;
+
+export const CONV_UNITS: Partial<Record<ConvKind, readonly string[]>> = {
+  mass: Object.keys(G_PER), temp: ["°C", "°F", "K"], pressure: Object.keys(KPA_PER), cooling: ["BTU/h", "kW cooling", "TR", "kcal/h"],
+  airflow: Object.keys(M3H_PER), area: Object.keys(AREA_PER_M2), volume: Object.keys(LITRE_PER), vacuum: Object.keys(PA_PER),
+  power: Object.keys(W_PER), energy: Object.keys(KWH_PER), velocity: Object.keys(MS_PER), time: Object.keys(S_PER),
+};
+
+const viaTable = (t: Record<string, number>, value: number, from: string) => {
+  need(from in t, `Unknown unit ${from}.`);
+  const base = value * t[from];
+  return Object.keys(t).filter((u) => u !== from).map((unit) => ({ unit, value: base / t[unit] }));
+};
 
 export function convert(kind: ConvKind, value: number, from: string, opts: { basis?: "gauge" | "absolute"; atmKpa?: number } = {}): { unit: string; value: number }[] {
   need(Number.isFinite(value), "Enter a number.");
@@ -343,8 +367,15 @@ export function convert(kind: ConvKind, value: number, from: string, opts: { bas
   switch (kind) {
     case "length-ft-m": return out([["ft", from === "ft" ? value : value / 0.3048], ["m", from === "m" ? value : value * 0.3048]]);
     case "length-in-mm": return out([["in", from === "in" ? value : value / 25.4], ["mm", from === "mm" ? value : value * 25.4]]);
-    case "mass": { const kg = from === "kg" ? value : value / 1000; return out([["kg", kg], ["g", kg * 1000]]); }
-    case "temp": { const c = from === "°C" ? value : (value - 32) / 1.8; need(c >= -273.15, "Below absolute zero."); return out([["°C", c], ["°F", c * 1.8 + 32]]); }
+    case "mass": return viaTable(G_PER, value, from);
+    case "temp": { const c = from === "°C" ? value : from === "K" ? value - 273.15 : (value - 32) / 1.8; need(c >= -273.15, "Below absolute zero."); return out([["°C", c], ["°F", c * 1.8 + 32], ["K", c + 273.15]]); }
+    case "area": return viaTable(AREA_PER_M2, value, from);
+    case "volume": return viaTable(LITRE_PER, value, from);
+    case "vacuum": return viaTable(PA_PER, value, from);
+    case "power": return viaTable(W_PER, value, from);
+    case "energy": return viaTable(KWH_PER, value, from);
+    case "velocity": return viaTable(MS_PER, value, from);
+    case "time": return viaTable(S_PER, value, from);
     case "pressure": {
       const kpa = toKpa(value, from as PUnit);
       const atm = opts.atmKpa ?? ATM_KPA;
@@ -353,18 +384,18 @@ export function convert(kind: ConvKind, value: number, from: string, opts: { bas
       return [...out(rows), { unit: `kPa ${opts.basis === "gauge" ? "absolute" : "gauge"} (atm ${atm} kPa)`, value: other }];
     }
     case "cooling": {
-      const btuh = from === "BTU/h" ? value : from === "TR" ? value * 12000 : value * BTUH_PER_KW_COOLING;
-      return out([["BTU/h", btuh], ["TR", btuh / 12000], ["kW cooling", btuh / BTUH_PER_KW_COOLING]]);
+      const btuh = from === "BTU/h" ? value : from === "TR" ? value * 12000 : from === "kcal/h" ? value / 0.2519958 : value * BTUH_PER_KW_COOLING;
+      return out([["BTU/h", btuh], ["TR", btuh / 12000], ["kW cooling", btuh / BTUH_PER_KW_COOLING], ["kcal/h", btuh * 0.2519958]]);
     }
-    case "airflow": { const m3h = from === "m³/h" ? value : value * M3H_PER_CFM; return out([["m³/h", m3h], ["CFM", m3h / M3H_PER_CFM]]); }
+    case "airflow": return viaTable(M3H_PER, value, from);
   }
 }
 
 /* Length: every unit at once, via exact millimetre factors (1 in = 25.4 mm, 1 ft = 12 in = 304.8 mm). */
 
-export const LENGTH_UNITS = ["mm", "cm", "m", "in", "ft"] as const;
+export const LENGTH_UNITS = ["mm", "cm", "m", "in", "ft", "yd", "km", "mile"] as const;
 export type LengthU = (typeof LENGTH_UNITS)[number];
-export const MM_PER: Record<LengthU, number> = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 };
+export const MM_PER: Record<LengthU, number> = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8, yd: 914.4, km: 1e6, mile: 1609344 };
 
 /** Multiplier from one length unit to another, as a readable step: "× 2.54" when the factor is short, else "÷ 12". */
 export function lengthStep(from: LengthU, to: LengthU): { op: "×" | "÷"; factor: number } {
