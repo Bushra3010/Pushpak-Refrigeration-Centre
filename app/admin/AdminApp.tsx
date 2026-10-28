@@ -20,9 +20,10 @@ import { ExpensesSection, TimeSheetsSection } from "./Expenses";
 import { PayrollSection } from "./Payroll";
 import { ProfitSection, TechProfitSection } from "./Profit";
 import { RepairsSection } from "./Repairs";
+import { PromoSection } from "./Promo";
 
 export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
-  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs";
+  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -48,6 +49,7 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
   ] },
   { group: "Growth", items: [
     { id: "growth", label: "AMC & Upsell", icon: "📈", roles: ["Admin", "Service Coordinator"] },
+    { id: "promo", label: "Spare Parts Promo", icon: "🛒", roles: ["Admin", "Service Coordinator"] },
     { id: "reports", label: "Reports", icon: "📊", roles: ["Admin", "Accounts"] },
   ] },
   { group: "System", items: [
@@ -65,6 +67,7 @@ const TITLES: Record<Section, string> = {
   profit: "Profit Dashboard", techprofit: "Technician Profitability", payroll: "Payroll & Salary", expenses: "Expenses & Claims",
   timesheets: "Time Sheets", calculators: "Copper Pipe & Tonnage Calculators", costrules: "Cost & Calculation Rules",
   repairs: "Repair Register — PCB Board · Stabilizer · Indoor Coil",
+  promo: "Spare Parts Promo — Explore More at Pushpak",
 };
 
 const SESSION_KEY = "prc:admin";
@@ -118,6 +121,7 @@ export default function AdminApp() {
     timesheets: db.timeLogs.filter((l) => l.status === "Submitted").length + db.corrections.filter((c) => c.status === "Pending").length,
     expenses: db.expenses.filter((e) => e.status === "Pending").length,
     repairs: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length,
+    promo: (db.partEnquiries ?? []).filter((e) => e.status === "New").length,
   };
 
   const sidebar = (
@@ -208,6 +212,7 @@ export default function AdminApp() {
             {current === "expenses" && <ExpensesSection db={db} who={who} notify={notify} />}
             {current === "timesheets" && <TimeSheetsSection db={db} who={who} notify={notify} />}
             {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
+            {current === "promo" && <PromoSection db={db} who={who} notify={notify} />}
             {current === "repairs" && <RepairsSection db={db} who={who} notify={notify} />}
             {current === "costrules" && <CostRulesSection key={JSON.stringify(db.fin)} db={db} who={who} notify={notify} />}
 

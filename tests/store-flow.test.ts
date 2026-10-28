@@ -5,8 +5,10 @@ import { addMonths, currentMonth } from "@/app/lib/finance";
 import {
   addExpense, approvePayroll, logCallback, reimburseExpense, requestCorrection, resetDemo, reviewCorrection, reviewExpense, reviewTime, saveCalc,
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
+  addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus,
 } from "@/app/lib/store";
 import { emptyDraft } from "@/app/components/repair";
+import { liveBanners } from "@/app/lib/promo";
 
 const db = (): Db => JSON.parse(localStorage.getItem("prc:db:v1")!);
 beforeAll(() => resetDemo());
@@ -109,5 +111,33 @@ describe("repair register", () => {
     expect(db().notifications.some((n) => n.to === "customer:c1" && n.title.includes("returned"))).toBe(true);
     expect(updateRepair(id, { brand: "" }, "Shop Staff")).toMatch(/brand/);
     expect(updateRepair(id, { brand: "Daikin Inverter" }, "Shop Staff")).toBeNull();
+  });
+});
+
+describe("spare-parts promo slider", () => {
+  it("5 seeded categories; admin add / edit / disable / reorder / delete controls what customers see", () => {
+    expect(liveBanners(db().promoBanners).map((b) => b.category)).toEqual(["AC Spare Parts", "Refrigerator Spare Parts", "Washing Machine Spare Parts", "Microwave Oven Spare Parts", "Water Purifier Spare Parts"]);
+    expect(addBanner({ category: "", title: "x", subtitle: "", parts: [], art: "parts", image: null, cta: "Enquire Now", enabled: true }, "Admin")).toEqual({ error: expect.stringMatching(/category/) });
+    const r = addBanner({ category: "Geyser Spare Parts", title: "Geyser Parts", subtitle: "", parts: ["Element"], art: "parts", image: null, cta: "Enquire Now", enabled: false }, "Admin");
+    const id = (r as { id: string }).id;
+    expect(liveBanners(db().promoBanners).some((b) => b.id === id)).toBe(false); // disabled → hidden
+    expect(updateBanner(id, { enabled: true }, "Admin")).toBeNull();
+    expect(liveBanners(db().promoBanners).at(-1)!.id).toBe(id);
+    moveBanner(id, -1, "Admin");
+    expect(liveBanners(db().promoBanners).at(-2)!.id).toBe(id);
+    expect(updateBanner(id, { title: "" }, "Admin")).toMatch(/title/);
+    expect(deleteBanner(id, "Admin")).toBeNull();
+    expect(db().promoBanners!.some((b) => b.id === id)).toBe(false);
+  });
+  it("Enquire Now creates an enquiry, notifies the office and the customer; status updates keep history", () => {
+    expect(addPartEnquiry({ bannerId: "pb1", category: "AC Spare Parts", customerId: "c1", name: "Rajesh Sharma", phone: "9876543210", appliance: "Daikin 1.5 Ton", part: "", note: "" }, "Rajesh Sharma")).toEqual({ error: expect.stringMatching(/part/) });
+    const r = addPartEnquiry({ bannerId: "pb1", category: "AC Spare Parts", customerId: "c1", name: "Rajesh Sharma", phone: "98765 43210", appliance: "Daikin 1.5 Ton", part: "Fan Motor", note: "" }, "Rajesh Sharma");
+    const id = (r as { id: string }).id;
+    const e = () => db().partEnquiries!.find((x) => x.id === id)!;
+    expect(e()).toMatchObject({ status: "New", phone: "9876543210", part: "Fan Motor" });
+    expect(db().notifications.some((n) => n.to === "admin" && n.title.includes("AC Spare Parts"))).toBe(true);
+    expect(db().notifications.some((n) => n.to === "customer:c1" && n.body.includes(id))).toBe(true);
+    expect(setEnquiryStatus(id, "Sold", "₹1,450 fitted", "Admin")).toBeNull();
+    expect(e().history.map((h) => h.status)).toEqual(["New", "Sold"]);
   });
 });

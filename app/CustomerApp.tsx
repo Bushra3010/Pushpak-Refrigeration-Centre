@@ -175,7 +175,7 @@ export default function CustomerApp() {
         {!detail && tab === "home" && (
           <HomeScreen db={db} me={me} unread={unread} onBook={(acId) => push({ k: "book", acId })} onOpenJob={(id) => push({ k: "job", id })}
             onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} onNotifications={() => push({ k: "notifications" })}
-            onAmc={() => push({ k: "amc" })} onAllJobs={() => goTab("bookings")} onSizing={() => push({ k: "sizing" })} />
+            onAmc={() => push({ k: "amc" })} onAllJobs={() => goTab("bookings")} onSizing={() => push({ k: "sizing" })} flash={flash} />
         )}
         {!detail && tab === "acs" && <AcsScreen db={db} me={me} onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} />}
         {!detail && tab === "bookings" && <BookingsScreen db={db} me={me} onOpenJob={(id) => push({ k: "job", id })} />}

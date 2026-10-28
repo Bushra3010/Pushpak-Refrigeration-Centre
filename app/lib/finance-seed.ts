@@ -10,6 +10,7 @@ import { addMonths, buildPayrollRun, completedOn, currentMonth, monthOf } from "
 import { DEFAULT_TONNAGE_COEFFICIENTS, LEGACY_TONNAGE_BASE } from "./calc/tonnage";
 import { DEFAULT_TOOL_SETTINGS } from "./tool-settings";
 import { seedRepairs } from "./repair";
+import { seedPromo } from "./promo";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const at = (date: string, minutes: number) => `${date}T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
@@ -53,6 +54,7 @@ export function withFinanceSeed(db: Db): Db {
   db.fin = structuredClone(DEFAULT_FINANCE_SETTINGS);
   db.techPrefs = {};
   db.repairs = seedRepairs(isoDay, `${today}T09:10:00`);
+  ({ banners: db.promoBanners, enquiries: db.partEnquiries } = seedPromo(`${today}T09:00:00`));
   db.version = DB_VERSION;
   db.holidays = [{ date: `${today.slice(0, 4)}-08-15`, name: "Independence Day" }, { date: `${today.slice(0, 4)}-10-02`, name: "Gandhi Jayanti" }];
 
@@ -173,7 +175,7 @@ const jobTechs = (j: Job) => [j.techId, ...(j.helpers ?? [])].filter((x): x is s
 
 /** Data saved by an older demo version has no finance collections — add the demo ones. */
 /** Saved-data schema version. Bump and add a step below whenever the shape of saved demo data changes. */
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 /** Upgrades data saved by older versions of the demo, step by step, keeping every customer, job, estimate and setting. */
 export function upgradeDb(db: Db): Db {
@@ -181,6 +183,8 @@ export function upgradeDb(db: Db): Db {
   const v = db.version ?? 1;
   // v2 → v3: repair register (keep any entries already saved)
   if (!Array.isArray(db.repairs)) db = { ...db, repairs: seedRepairs(isoDay, `${isoDay(0)}T09:10:00`) };
+  // v3 → v4: spare-parts promo banners + enquiries (keep any already saved)
+  if (!Array.isArray(db.promoBanners)) { const p = seedPromo(`${isoDay(0)}T09:00:00`); db = { ...db, promoBanners: p.banners, partEnquiries: db.partEnquiries ?? p.enquiries }; }
   if (v >= DB_VERSION && db.fin.tools) return db;
   let fin = db.fin;
   // v1 → v2 (a): tonnage coefficients still on the old US base (20 BTU/ft² at 8 ft) under-size Indian rooms ~4–5×

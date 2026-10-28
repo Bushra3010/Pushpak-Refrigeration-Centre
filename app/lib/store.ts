@@ -18,6 +18,7 @@ import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
 const KEY = "prc:db:v1";
 const fresh = () => withFinanceSeed(seedDb());
@@ -910,6 +911,85 @@ export function setRepairStatus(id: string, status: RepairStatus, info: { note?:
     if (r.customerId && (status === "Repaired" || status === "Returned"))
       d.notifications.unshift({ id: uid(), at: nowIso(), to: `customer:${r.customerId}`, title: status === "Repaired" ? `Your ${r.itemType} is repaired` : `Your ${r.itemType} has been returned`, body: `${r.id} · ${r.brand}${r.charge != null ? ` · ${inr(r.charge)}` : ""}`, read: false });
     audit(d, by, "Repair status", `${id} → ${status}${info.note ? ` · ${info.note}` : ""}`);
+  });
+  return err;
+}
+
+/* ───────────────────────── Spare-parts promo banners + enquiries ───────────────────────── */
+
+export function addBanner(b: BannerDraft, by: string): { id: string } | { error: string } {
+  const err = validateBanner(b);
+  if (err) return { error: err };
+  let id = "";
+  mutate((d) => {
+    d.promoBanners ??= [];
+    id = `pb${++d.seq}`;
+    const order = d.promoBanners.reduce((m, x) => Math.max(m, x.order), 0) + 1;
+    d.promoBanners.push({ ...b, id, order, updatedAt: nowIso(), updatedBy: by });
+    audit(d, by, "Promo banner added", `${b.category} · ${b.title}${b.enabled ? "" : " (disabled)"}`);
+  });
+  return { id };
+}
+
+export function updateBanner(id: string, patch: Partial<BannerDraft>, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const b = d.promoBanners?.find((x) => x.id === id);
+    if (!b) { err = "Banner not found."; return; }
+    err = validateBanner({ ...b, ...patch });
+    if (err) return;
+    Object.assign(b, patch, { updatedAt: nowIso(), updatedBy: by });
+    audit(d, by, patch.enabled !== undefined && Object.keys(patch).length === 1 ? (patch.enabled ? "Promo banner enabled" : "Promo banner disabled") : "Promo banner edited", `${b.category} · ${b.title}`);
+  });
+  return err;
+}
+
+export function deleteBanner(id: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const b = d.promoBanners?.find((x) => x.id === id);
+    if (!b) { err = "Banner not found."; return; }
+    d.promoBanners = d.promoBanners!.filter((x) => x.id !== id);
+    audit(d, by, "Promo banner deleted", `${b.category} · ${b.title}`);
+  });
+  return err;
+}
+
+/** Move a banner one place up (-1) or down (+1) in the slider. */
+export function moveBanner(id: string, dir: -1 | 1, by: string) {
+  mutate((d) => {
+    const list = (d.promoBanners ?? []).sort((a, b) => a.order - b.order);
+    const i = list.findIndex((x) => x.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i].order, list[j].order] = [list[j].order, list[i].order];
+    audit(d, by, "Promo banner reordered", `${list[i].title} moved ${dir < 0 ? "up" : "down"}`);
+  });
+}
+
+export function addPartEnquiry(e: Pick<PartEnquiry, "bannerId" | "category" | "customerId" | "name" | "phone" | "appliance" | "part" | "note">, by: string): { id: string } | { error: string } {
+  const err = validateEnquiry(e);
+  if (err) return { error: err };
+  let id = "";
+  mutate((d) => {
+    d.partEnquiries ??= [];
+    id = `PE-${d.partEnquiries.reduce((m, x) => Math.max(m, Number(x.id.slice(3)) || 1000), 1000) + 1}`;
+    const at = nowIso();
+    d.partEnquiries.unshift({ ...e, phone: e.phone.replace(/\D/g, "").slice(-10), id, at, status: "New", history: [{ at, status: "New", by }] });
+    d.notifications.unshift({ id: uid(), at, to: "admin", title: `Spare part enquiry · ${e.category}`, body: `${e.name} (${e.phone}) needs ${e.part}${e.appliance ? ` for ${e.appliance}` : ""}`, read: false });
+    if (e.customerId) d.notifications.unshift({ id: uid(), at, to: `customer:${e.customerId}`, title: "Enquiry received", body: `We'll call you about ${e.part} shortly. Ref ${id}.`, read: false });
+    audit(d, by, "Spare part enquiry", `${id} · ${e.category} · ${e.part}`);
+  });
+  return { id };
+}
+
+export function setEnquiryStatus(id: string, status: EnquiryStatus, note: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const q = d.partEnquiries?.find((x) => x.id === id);
+    if (!q) { err = "Enquiry not found."; return; }
+    q.status = status;
+    q.history.push({ at: nowIso(), status, by, note: note.trim() || undefined });
+    audit(d, by, "Spare part enquiry status", `${id} → ${status}`);
   });
   return err;
 }

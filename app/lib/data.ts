@@ -8,6 +8,7 @@
 /* ───────────────────────── Types ───────────────────────── */
 
 import type { RepairEntry } from "./repair";
+import type { PartEnquiry, PromoBanner } from "./promo";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -314,6 +315,9 @@ export interface Db {
   techPrefs?: Record<string, { fav: string[]; recent: string[] }>;
   /** PCB / stabilizer / coil repair register (app/lib/repair.ts) */
   repairs?: RepairEntry[];
+  /** "Explore More at Pushpak" spare-parts banners + enquiries (app/lib/promo.ts) */
+  promoBanners?: PromoBanner[];
+  partEnquiries?: PartEnquiry[];
   /** saved-data schema version (see upgradeDb) */
   version?: number;
 }

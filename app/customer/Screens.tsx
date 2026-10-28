@@ -12,15 +12,16 @@ import {
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
+import { ExploreMore } from "./SpareParts";
 
 const myJobs = (db: Db, me: Customer) => db.jobs.filter((j) => j.customerId === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 const serviceDue = (db: Db, ac: AcUnit) => { const s = acSummary(db, ac.id); return !s.lastService || daysBetween(s.lastService, today()) >= db.settings.reminderDays; };
 
 /* ───────────────────────── Home ───────────────────────── */
 
-export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddAc, onNotifications, onAmc, onAllJobs, onSizing }: {
+export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddAc, onNotifications, onAmc, onAllJobs, onSizing, flash }: {
   db: Db; me: Customer; unread: number; onBook: (acId?: string) => void; onOpenJob: (id: string) => void; onOpenAc: (id: string) => void;
-  onAddAc: () => void; onNotifications: () => void; onAmc: () => void; onAllJobs: () => void; onSizing?: () => void;
+  onAddAc: () => void; onNotifications: () => void; onAmc: () => void; onAllJobs: () => void; onSizing?: () => void; flash?: (m: string) => void;
 }) {
   const jobs = myJobs(db, me);
   const acs = db.acs.filter((a) => a.customerId === me.id);
@@ -100,6 +101,9 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
           <ActionCard tone="blue" title={`Service due for ${due.length === 1 ? `your ${due[0].application.toLowerCase()} AC` : `${due.length} ACs`}`}
             body={`Regular cleaning every ${Math.round(db.settings.reminderDays / 30)} months keeps cooling strong and bills low.`} cta="Book" onClick={() => onBook(due[0].id)} />
         )}
+
+        {/* Spare-parts promo slider — customer home only, managed in Admin → Spare Parts Promo */}
+        {flash && <ExploreMore db={db} me={me} flash={flash} />}
 
         {/* Popular service — Bada Business style feature card */}
         <SectionHead title="Popular Services" onAll={() => onBook()} />
