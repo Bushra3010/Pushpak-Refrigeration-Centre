@@ -5,17 +5,18 @@ import { AcIcon, CheckIcon, PlusIcon } from "../components/icons";
 import { PreWorkForm, preWorkAnswered } from "../components/service";
 import { Chips, Footer, PageHeader, PrimaryButton, card, field, label, small } from "../components/ui";
 import {
-  COMPLAINTS, EMPTY_PREWORK, SLOTS, acLabel, acSummary, fmtDate, isoDay,
-  type ComplaintIssue, type Customer, type Db, type PreWork,
+  COMPLAINTS, EMPTY_PREWORK, SLOTS, acLabel, acSummary, fmtDate, isoDay, validateSite,
+  type ComplaintIssue, type Customer, type Db, type PreWork, type ServiceSite,
 } from "../lib/data";
+import { SiteForm, siteFromProfile } from "./SiteForm";
 import type { NewJob } from "../lib/store";
 import { NewAcBanner } from "./Sizing";
 
-const STEPS = ["Select AC", "Problem", "History", "Schedule"];
+const STEPS = ["Select AC", "Problem", "History", "Address & time"];
 
 /** Book service: AC → complaint in the customer's words → previous history → date & slot. */
 export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSizing }: {
-  db: Db; me: Customer; initialAc?: string; onBack: () => void; onAddAc: () => void; onSubmit: (j: NewJob) => void; onSizing?: () => void;
+  db: Db; me: Customer; initialAc?: string; onBack: () => void; onAddAc: () => void; onSubmit: (j: NewJob, saveAsDefault: boolean) => void; onSizing?: () => void;
 }) {
   const acs = db.acs.filter((a) => a.customerId === me.id);
   const [step, setStep] = useState(initialAc ? 1 : 0);
@@ -26,16 +27,20 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
   const [pre, setPre] = useState<PreWork>({ ...EMPTY_PREWORK });
   const [date, setDate] = useState(isoDay(0));
   const [slot, setSlot] = useState("");
+  const [site, setSite] = useState<ServiceSite>(() => siteFromProfile(me));
+  const [saveDefault, setSaveDefault] = useState(false);
+  const [tried, setTried] = useState(false);
+  const siteErr = validateSite(site);
 
   const toggle = (i: ComplaintIssue) => setIssues((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]));
   const days = Array.from({ length: 7 }, (_, i) => isoDay(i));
   const canNext = [!!acId, issues.length > 0 && (issues.length > 1 || issues[0] !== "Other" || notes.trim().length > 3), true, !!slot][step];
 
-  const submit = () => onSubmit({
-    customerId: me.id, acId, date, slot, source: "Customer App",
+  const submit = () => { setTried(true); if (siteErr || !slot) return; onSubmit({
+    customerId: me.id, acId, date, slot, source: "Customer App", site,
     complaint: { issues, notes: notes.trim(), errorCode: code.trim() }, preWork: pre,
     priority: issues.includes("Gas Leakage Suspected") || me.type === "Commercial" ? "High" : "Normal",
-  });
+  }, saveDefault); };
 
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
@@ -97,6 +102,10 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
 
         {step === 3 && (
           <>
+            <div style={{ ...card, padding: 14, marginBottom: 16 }}>
+              <SiteForm me={me} value={site} onChange={setSite} saveDefault={saveDefault} onSaveDefault={setSaveDefault} />
+              {tried && siteErr && <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{siteErr}</p>}
+            </div>
             <span style={label}>Date</span>
             <div className="no-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
               {days.map((d, i) => {
@@ -117,7 +126,8 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
               <div><b>AC:</b> {(() => { const a = acs.find((x) => x.id === acId); return a ? `${a.application} · ${acLabel(a)}` : ""; })()}</div>
               <div><b>Problem:</b> {issues.join(", ")}</div>
               <div><b>History answers:</b> {preWorkAnswered(pre)} captured</div>
-              <div><b>Address:</b> {me.address}</div>
+              <div><b>Address:</b> {site.address}{site.area ? `, ${site.area}` : ""}{site.landmark ? ` (near ${site.landmark})` : ""}</div>
+              <div><b>Contact:</b> {site.contactName} · +91 {site.contactPhone}</div>
               <div style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6 }}>Inspection charge ₹{db.services.find((s) => s.id === "sv-visit")?.price} (adjusted if you go ahead with the repair{me.amc ? "; free under your AMC" : ""}). You approve the quotation before any work starts.</div>
             </div>
           </>
@@ -132,7 +142,7 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
               {step === 2 && <button onClick={() => { setPre({ ...EMPTY_PREWORK }); setStep(3); }} style={{ background: "none", border: "none", color: "var(--ink-soft)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 6 }}>Skip — the technician will ask</button>}
             </div>
           )
-          : <PrimaryButton tone="gold" disabled={!slot} onClick={submit}>Confirm Booking</PrimaryButton>}
+          : <PrimaryButton tone="gold" disabled={!slot} onClick={submit}>{!slot ? "Pick a time slot" : "Confirm Booking"}</PrimaryButton>}
       </Footer>
     </div>
   );

@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { BrandMark } from "../components/Brand";
 import {
-  AcIcon, BellIcon, ChevronRight, ClockIcon, EditIcon, HelpIcon, HistoryIcon, InfoIcon, LogoutIcon, ReceiptIcon, ShieldIcon, WrenchIcon,
+  AcIcon, BellIcon, ChevronRight, PinIcon, ClockIcon, EditIcon, HelpIcon, HistoryIcon, InfoIcon, LogoutIcon, ReceiptIcon, ShieldIcon, WrenchIcon,
 } from "../components/icons";
 import { AcForm, AcHistory, AcSpecs, EMPTY_AC, JobPill, MapMock, type AcDraft } from "../components/service";
 import { AppHeader, Avatar, BannerCarousel, Empty, Footer, GoldTiles, Hello, PageHeader, Pill, PrimaryButton, SectionHead, Tabs, card, iconBtn, sectionTitle, small } from "../components/ui";
 import {
-  acLabel, acSummary, daysBetween, fmtDate, fmtDateTime, initials, inr, isOpen, jobTotals, relDay, today,
+  acLabel, acSummary, siteOf, daysBetween, fmtDate, fmtDateTime, initials, inr, isOpen, jobTotals, relDay, today,
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
@@ -156,6 +156,9 @@ export function JobRow({ db, job, onOpen }: { db: Db; job: Job; onOpen: () => vo
         <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-secondary)" }}>{ac ? `${ac.application} · ${acLabel(ac)}` : ""}</p>
         <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--ink-mute)", display: "flex", alignItems: "center", gap: 4 }}>
           <ClockIcon s={12} c="var(--ink-mute)" /> {relDay(job.date)}, {job.slot}{tech ? ` · ${tech.name}` : ""}
+        </p>
+        <p style={{ margin: "3px 0 0", fontSize: 11.5, color: "var(--ink-mute)", display: "flex", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ flexShrink: 0, marginTop: 2, display: "flex" }}><PinIcon s={12} c="var(--ink-mute)" /></span> <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.45 }}>{(() => { const st = siteOf(job, db.customers.find((x) => x.id === job.customerId)); return `${st.address}${st.area && !st.address.includes(st.area) ? `, ${st.area}` : ""}${st.landmark ? ` · near ${st.landmark}` : ""}`; })()}</span>
         </p>
       </div>
     </button>

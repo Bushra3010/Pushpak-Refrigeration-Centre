@@ -4,14 +4,19 @@ import { useState } from "react";
 import { ClockIcon, PhoneIcon, ReceiptIcon, StarIcon } from "../components/icons";
 import { ComplaintBox, InvoiceDoc, JobPill, MapMock, ProgressSteps, QuoteTable, SecureBadge, SecureScreen, Timeline } from "../components/service";
 import { Avatar, BottomSheet, Chips, Footer, GhostButton, PageHeader, PrimaryButton, StarPicker, card, sectionTitle, small } from "../components/ui";
-import { acLabel, fmtDateTime, initials, inr, jobTotals, relDay, stepOf, type Db, type Job, type PayMethod } from "../lib/data";
+import { acLabel, fmtDateTime, initials, inr, jobTotals, relDay, siteOf, stepOf, validateSite, type Db, type Job, type PayMethod, type ServiceSite } from "../lib/data";
+import { changeJobSite } from "../lib/store";
+import { SiteCard, SiteForm } from "./SiteForm";
 
 export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, onRate, onCancel, onInvoice }: {
   db: Db; job: Job; onBack: () => void;
   onApprove: () => void; onReject: () => void; onPay: (amount: number, method: PayMethod, ref: string) => void;
   onRate: (n: number) => void; onCancel: (reason: string) => void; onInvoice: () => void;
 }) {
-  const [sheet, setSheet] = useState<"approve" | "reject" | "pay" | "cancel" | null>(null);
+  const [sheet, setSheet] = useState<"approve" | "reject" | "pay" | "cancel" | "address" | null>(null);
+  const cust = db.customers.find((x) => x.id === job.customerId);
+  const site = siteOf(job, cust);
+  const canChangeSite = job.status !== "Cancelled" && stepOf(job.status) < stepOf("On the Way");
   const [stars, setStars] = useState(0);
   const ac = db.acs.find((a) => a.id === job.acId)!;
   const tech = db.techs.find((t) => t.id === job.techId);
@@ -33,6 +38,8 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
           {job.status === "On the Way" && (
             <div className="fade-up" style={{ marginTop: 12 }}><MapMock moving etaMin={18} /></div>
           )}
+          <SiteCard site={site} onChange={canChangeSite ? () => setSheet("address") : undefined} />
+
           {tech ? (
             <div style={{ ...card, padding: 14, marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
               <Avatar initials={initials(tech.name)} size={44} />
@@ -118,6 +125,7 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
           </Footer>
         )}
 
+        {sheet === "address" && cust && <AddressSheet job={job} site={site} me={cust} onClose={() => setSheet(null)} />}
         {sheet === "approve" && <ApproveSheet total={t.total} onClose={() => setSheet(null)} onConfirm={() => { setSheet(null); onApprove(); }} />}
         {sheet === "reject" && (
           <BottomSheet title="Reject quotation?" onClose={() => setSheet(null)}>
@@ -197,5 +205,18 @@ export function InvoicePage({ db, job, onBack }: { db: Db; job: Job; onBack: () 
         <PrimaryButton onClick={() => window.print()}>Download / Print PDF</PrimaryButton>
       </div>
     </SecureScreen>
+  );
+}
+
+function AddressSheet({ job, site, me, onClose }: { job: Job; site: ServiceSite; me: NonNullable<Db["customers"][number]>; onClose: () => void }) {
+  const [v, setV] = useState<ServiceSite>(site);
+  const [err, setErr] = useState<string | null>(null);
+  const save = () => { const e = validateSite(v) ?? changeJobSite(job.id, v, me.name); if (e) setErr(e); else onClose(); };
+  return (
+    <BottomSheet title="Change service address" onClose={onClose}>
+      <SiteForm me={me} value={v} onChange={setV} />
+      {err && <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
+      <div style={{ marginTop: 14 }}><PrimaryButton onClick={save}>Save Address</PrimaryButton></div>
+    </BottomSheet>
   );
 }

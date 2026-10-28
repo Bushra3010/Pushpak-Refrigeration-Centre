@@ -9,7 +9,7 @@ import { AcHistory, AcSpecs, JobPill, PriorityPill, SecureScreen } from "../comp
 import { AppHeader, Avatar, BottomSheet, Empty, GoldTiles, Hello, PageHeader, Pill, PrimaryButton, SectionHead, Tabs, Toggle, card, field, label, sectionTitle, small } from "../components/ui";
 import {
   DEMO_OTP, acLabel, acSummary, fmtDateTime, initials, inr, isDone, isOpen, jobTotals, relDay, today,
-  type AppNotification, type Db, type Job, type Technician,
+  type AppNotification, type Db, type Job, type Technician, siteOf,
 } from "../lib/data";
 
 /* ───────────────────────── Login ───────────────────────── */
@@ -133,7 +133,7 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSe
             <button key={j.id} onClick={() => onOpen(j.id)} className="press fade-up" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "2px solid var(--gold)", textAlign: "left", cursor: "pointer", boxShadow: "var(--shadow-card)" }}>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--gold-dark)", letterSpacing: "0.05em" }}>🔔 NEW JOB ASSIGNED · TAP TO ACCEPT</span>
               <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{c?.name} · {j.complaint.issues.join(", ")}</p>
-              <p style={small}>{relDay(j.date)}, {j.slot} · {c?.area}</p>
+              <p style={small}>{relDay(j.date)}, {j.slot} · {siteOf(j, c).area}</p>
             </button>
           );
         })}
@@ -182,7 +182,7 @@ export function JobCard({ db, job, onOpen }: { db: Db; job: Job; onOpen: () => v
       </div>
       <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>{job.complaint.issues.join(", ")} · {ac ? acLabel(ac) : ""}</p>
       <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--ink-mute)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-        <ClockIcon s={12} c="var(--ink-mute)" /> {relDay(job.date)}, {job.slot} · <PinIcon s={12} c="var(--ink-mute)" /> {c?.area}
+        <ClockIcon s={12} c="var(--ink-mute)" /> {relDay(job.date)}, {job.slot} · <PinIcon s={12} c="var(--ink-mute)" /> {siteOf(job, c).area}
         {repeat && <span style={{ color: "var(--error-text)", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}><AlertIcon s={11} c="var(--error-text)" /> Repeat</span>}
       </p>
     </button>

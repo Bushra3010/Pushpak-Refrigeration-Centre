@@ -167,6 +167,21 @@ export type JobStatus = (typeof JOB_FLOW)[number] | "Cancelled";
 
 export interface TimelineEntry { status: string; at: string; by: string; note?: string }
 
+/** Where this visit happens — usually the customer's saved address, but a booking can use another. */
+export interface ServiceSite { address: string; area: string; landmark: string; contactName: string; contactPhone: string; gps: string }
+
+/** The job's service address, falling back to the customer's saved address for older bookings. */
+export const siteOf = (job: Pick<Job, "site">, c: Pick<Customer, "address" | "area" | "gps" | "name" | "phone"> | undefined): ServiceSite =>
+  job.site ?? { address: c?.address ?? "", area: c?.area ?? "", landmark: "", contactName: c?.name ?? "", contactPhone: c?.phone ?? "", gps: c?.gps ?? "" };
+
+export function validateSite(s: ServiceSite): string | null {
+  if (s.address.trim().length < 8) return "Enter the full address (house / flat, street, city).";
+  if (!s.area.trim()) return "Enter the area / locality.";
+  if (!s.contactName.trim()) return "Enter the name of the person at the address.";
+  if (!/^[6-9]\d{9}$/.test(s.contactPhone.replace(/\D/g, "").slice(-10))) return "Enter a valid 10-digit contact mobile.";
+  return null;
+}
+
 export interface Job {
   id: string;
   customerId: string;
@@ -178,6 +193,8 @@ export interface Job {
   createdAt: string;
   date: string; // scheduled ISO date
   slot: string;
+  /** service address for this visit (older jobs: none → customer's saved address) */
+  site?: ServiceSite;
   complaint: Complaint;
   preWork: PreWork;
   customerVerified: boolean;

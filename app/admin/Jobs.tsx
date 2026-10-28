@@ -5,7 +5,7 @@ import { AcHistory, AcSpecs, ComplaintBox, JOB_TONE, PAY_TONE, PreWorkForm, PreW
 import { Chips } from "../components/ui";
 import {
   COMPLAINTS, EMPTY_PREWORK, SLOTS, acLabel, acSummary, fmtDate, fmtDateTime, inr, isOpen, isoDay, jobTotals, paymentStatus, relDay, today,
-  type ComplaintIssue, type Db, type Job, type PayMethod, type PreWork,
+  type ComplaintIssue, type Db, type Job, type PayMethod, type PreWork, siteOf,
 } from "../lib/data";
 import {
   addJobNote, assignJob, cancelJob, closeJob, createJob, decideQuote, recordPayment, refundPayment, rescheduleJob, setPriority,
@@ -174,7 +174,7 @@ export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job;
         <div className="admin-grid-2" style={{ marginTop: 14 }}>
           <div>
             <p style={{ ...sec, marginTop: 0 }}>Customer</p>
-            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6 }}><b>{c.name}</b> · +91 {c.phone}{c.altPhone ? ` / ${c.altPhone}` : ""}<br />{c.address}<br /><span style={muted}>{c.type} · prefers {c.contactPref}{c.amc ? ` · AMC ${c.amc.plan} till ${fmtDate(c.amc.to)}` : ""}</span></p>
+            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6 }}><b>{c.name}</b> · +91 {c.phone}{c.altPhone ? ` / ${c.altPhone}` : ""}<br />{(() => { const st = siteOf(job, c); return <>{st.address}{st.area ? `, ${st.area}` : ""}{st.landmark ? ` · near ${st.landmark}` : ""}{st.gps && <> · <a href={`https://maps.google.com/?q=${st.gps}`} target="_blank" rel="noreferrer">Map</a></>}{(st.address !== c.address || st.contactPhone !== c.phone) && <><br /><span style={{ color: "var(--gold-dark)", fontWeight: 600 }}>Service address for this visit · contact {st.contactName} +91 {st.contactPhone}</span></>}</>; })()}<br /><span style={muted}>{c.type} · prefers {c.contactPref}{c.amc ? ` · AMC ${c.amc.plan} till ${fmtDate(c.amc.to)}` : ""}</span></p>
             <p style={sec}>AC</p>
             <p style={{ margin: 0, fontSize: 13.5 }}><b>{ac.application}</b> · {acLabel(ac)} · {ac.ageYears} yrs · {ac.usage}</p>
             <p style={sec}>Complaint</p>

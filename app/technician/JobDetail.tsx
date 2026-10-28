@@ -11,7 +11,7 @@ import { PipeCalcSheet } from "./PipeSheet";
 import { Avatar, BottomSheet, Chips, Footer, GhostButton, PageHeader, Pill, PrimaryButton, Tabs, card, field, label, sectionTitle, small } from "../components/ui";
 import {
   DEMO_OTP, ROOT_CAUSES, acLabel, acSummary, fmtDateTime, initials, inr, isoDay, jobTotals, recommend, relDay, stepOf,
-  type Db, type Diagnosis, type Job, type LineKind, type PayMethod, type PreWork, type QuoteLine, type Technician,
+  type Db, type Diagnosis, type Job, type LineKind, type PayMethod, type PreWork, type QuoteLine, type Technician, siteOf,
 } from "../lib/data";
 import {
   addOnWork, completeWork, decideQuote, declineJob, recordPayment, sendQuote, setFollowUp, setStatus, updateJob, visitChargeOnly,
@@ -26,6 +26,7 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
   const [sheet, setSheet] = useState<Sheet>(null);
   const [showHistory, setShowHistory] = useState(true);
   const c = db.customers.find((x) => x.id === job.customerId)!;
+  const site = siteOf(job, c);
   const ac = db.acs.find((x) => x.id === job.acId)!;
   const sum = acSummary(db, ac.id);
   const t = jobTotals(job, db.settings);
@@ -58,15 +59,16 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
               <Avatar initials={initials(c.name)} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 700, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>{c.name} <PriorityPill p={job.priority} />{c.amc && <Pill tone="green">AMC {c.amc.plan}</Pill>}</p>
-                <p style={{ ...small, display: "flex", alignItems: "flex-start", gap: 4 }}><PinIcon s={14} c="var(--ink-soft)" /> {c.address}</p>
+                <p style={{ ...small, display: "flex", alignItems: "flex-start", gap: 4 }}><PinIcon s={14} c="var(--ink-soft)" /> <span>{site.address}{site.area ? `, ${site.area}` : ""}{site.landmark ? ` · near ${site.landmark}` : ""}</span></p>
+                {(site.contactPhone !== c.phone || site.address !== c.address) && <p style={{ margin: "2px 0 0", fontSize: 11.5, fontWeight: 700, color: "var(--gold-dark)" }}>Service address for this visit · contact {site.contactName} {site.contactPhone}</p>}
                 <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "var(--ink-mute)" }}>{c.type} · prefers {c.contactPref} · {job.source}</p>
               </div>
             </div>
             {!closedish && (
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <a href={`tel:+91${c.phone}`} className="press" style={actionLink("var(--success)", "var(--success-text)")}><PhoneIcon s={16} c="var(--success-text)" /> Call</a>
+                <a href={`tel:+91${site.contactPhone || c.phone}`} className="press" style={actionLink("var(--success)", "var(--success-text)")}><PhoneIcon s={16} c="var(--success-text)" /> Call</a>
                 <a href={`https://wa.me/91${c.phone}`} target="_blank" rel="noreferrer" className="press" style={actionLink("#e7f8ee", "#128c4a")}>WhatsApp</a>
-                <a href={mapsUrl(c.gps, c.address)} target="_blank" rel="noreferrer" className="press" style={actionLink("var(--blue-tint)", "var(--blue)")}><PinIcon s={16} c="var(--blue)" /> Navigate</a>
+                <a href={mapsUrl(site.gps, `${site.address}, ${site.area}`)} target="_blank" rel="noreferrer" className="press" style={actionLink("var(--blue-tint)", "var(--blue)")}><PinIcon s={16} c="var(--blue)" /> Navigate</a>
               </div>
             )}
           </div>

@@ -5,7 +5,7 @@ import { addMonths, currentMonth } from "@/app/lib/finance";
 import {
   addExpense, approvePayroll, logCallback, reimburseExpense, requestCorrection, resetDemo, reviewCorrection, reviewExpense, reviewTime, saveCalc,
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
-  addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus,
+  addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus, createJob, changeJobSite, setStatus,
 } from "@/app/lib/store";
 import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
@@ -139,5 +139,19 @@ describe("spare-parts promo slider", () => {
     expect(db().notifications.some((n) => n.to === "customer:c1" && n.body.includes(id))).toBe(true);
     expect(setEnquiryStatus(id, "Sold", "₹1,450 fitted", "Admin")).toBeNull();
     expect(e().history.map((h) => h.status)).toEqual(["New", "Sold"]);
+  });
+});
+
+describe("service address per booking", () => {
+  it("stored on the job, changeable until the technician is on the way", () => {
+    const site = { address: "Flat 12, Shanti Apartments, Sector 10", area: "Dwarka Sector 10", landmark: "Near metro", contactName: "Sunil Sharma", contactPhone: "98100 12345", gps: "" };
+    const id = createJob({ customerId: "c1", acId: "ac1", date: "2026-10-30", slot: "9:00 – 11:00 AM", source: "Customer App", complaint: { issues: ["Less Cooling"], notes: "", errorCode: "" }, site }, "Rajesh Sharma");
+    const j = () => db().jobs.find((x) => x.id === id)!;
+    expect(j().site).toMatchObject({ area: "Dwarka Sector 10", contactPhone: "9810012345" });
+    expect(changeJobSite(id, { ...site, address: "x" }, "Rajesh Sharma")).toMatch(/full address/);
+    expect(changeJobSite(id, { ...site, area: "Janakpuri" }, "Rajesh Sharma")).toBeNull();
+    expect(j().site!.area).toBe("Janakpuri");
+    setStatus(id, "On the Way", "Admin");
+    expect(changeJobSite(id, { ...site, area: "Rohini" }, "Rajesh Sharma")).toMatch(/on the way/);
   });
 });

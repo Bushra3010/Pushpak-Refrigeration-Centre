@@ -133,7 +133,10 @@ export default function CustomerApp() {
         {/* ── Detail pages ── */}
         {detail?.k === "book" && (
           <BookService key={detail.acId ?? "new"} db={db} me={me} initialAc={detail.acId} onBack={back} onAddAc={() => push({ k: "addAc", thenBook: true })} onSizing={() => push({ k: "sizing" })}
-            onSubmit={(j) => { const id = createJob(j, me!.name); setStack([{ k: "job", id }]); flash("Service booked! We'll assign a technician shortly."); }} />
+            onSubmit={(j, saveAsDefault) => {
+              if (saveAsDefault && j.site) updateCustomer(me!.id, { address: j.site.address, area: j.site.area, ...(j.site.gps ? { gps: j.site.gps } : {}) }, me!.name);
+              const id = createJob(j, me!.name); setStack([{ k: "job", id }]); flash("Service booked! We'll assign a technician shortly.");
+            }} />
         )}
         {detail?.k === "job" && (() => {
           const j = job(detail.id);

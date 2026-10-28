@@ -12,7 +12,7 @@ import { useSyncExternalStore } from "react";
 import {
   EMPTY_DIAGNOSIS, EMPTY_PREWORK, JOB_FLOW, acLabel, fmtDate, inr, isoDay, jobTotals, nowIso, seedDb, stepOf,
   isOpen, type AcQuoteRequest, type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
-  type PreWork, type QuoteLine, type Settings, type Technician,
+  type PreWork, type QuoteLine, type ServiceSite, type Settings, type Technician, validateSite,
 } from "./data";
 import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
@@ -151,7 +151,7 @@ export function updateAc(id: string, patch: Partial<AcUnit>, by: string) {
 
 export interface NewJob {
   customerId: string; acId: string; date: string; slot: string; complaint: Complaint; preWork?: PreWork;
-  priority?: Job["priority"]; source: Job["source"]; techId?: string | null;
+  priority?: Job["priority"]; source: Job["source"]; techId?: string | null; site?: ServiceSite;
 }
 
 export function createJob(input: NewJob, by: string): string {
@@ -162,13 +162,14 @@ export function createJob(input: NewJob, by: string): string {
     const job: Job = {
       id, customerId: input.customerId, acId: input.acId, techId: null, status: "New Request",
       priority: input.priority ?? "Normal", source: input.source, createdAt: nowIso(), date: input.date, slot: input.slot,
+      ...(input.site ? { site: { ...input.site, contactPhone: input.site.contactPhone.replace(/\D/g, "").slice(-10) } } : {}),
       complaint: input.complaint, preWork: input.preWork ?? { ...EMPTY_PREWORK }, customerVerified: false,
       diagnosis: { ...EMPTY_DIAGNOSIS }, lines: [], discount: 0, quote: null,
       work: { serviceType: "", before: "", after: "", remarks: "" }, invoice: null, payments: [], followUp: null, notes: [],
       timeline: [{ status: "New Request", at: nowIso(), by }],
     };
     d.jobs.unshift(job);
-    notify(d, "admin", `New service request · ${input.source}`, `${id} · ${cust.name} · ${input.complaint.issues.join(", ")}`, id);
+    notify(d, "admin", `New service request · ${input.source}`, `${id} · ${cust.name} · ${input.complaint.issues.join(", ")}${input.site ? ` · ${input.site.area}` : ""}`, id);
     notify(d, `customer:${cust.id}`, "Service request received", `${id} for ${fmtDate(input.date)}, ${input.slot}. We'll assign a technician shortly.`, id);
     if (input.techId) doAssign(d, job, input.techId, by);
   });
@@ -990,6 +991,22 @@ export function setEnquiryStatus(id: string, status: EnquiryStatus, note: string
     q.status = status;
     q.history.push({ at: nowIso(), status, by, note: note.trim() || undefined });
     audit(d, by, "Spare part enquiry status", `${id} → ${status}`);
+  });
+  return err;
+}
+
+/** Customer changes the service address before the technician sets out. */
+export function changeJobSite(jobId: string, site: ServiceSite, by: string): Err {
+  let err: string | null = validateSite(site);
+  if (err) return err;
+  mutate((d) => {
+    const j = d.jobs.find((x) => x.id === jobId);
+    if (!j) { err = "Booking not found."; return; }
+    if (stepOf(j.status) >= stepOf("On the Way")) { err = "The technician is already on the way — please call the office to change the address."; return; }
+    j.site = { ...site, contactPhone: site.contactPhone.replace(/\D/g, "").slice(-10) };
+    j.notes.push({ at: nowIso(), by, text: `Service address changed to: ${site.address}, ${site.area}` });
+    notify(d, "admin", "Service address changed", `${j.id} · ${site.area}`, j.id);
+    if (j.techId) notify(d, `tech:${j.techId}`, "Address changed", `${j.id} · now at ${site.address}, ${site.area}`, j.id);
   });
   return err;
 }
