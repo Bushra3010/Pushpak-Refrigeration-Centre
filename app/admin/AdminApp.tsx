@@ -21,9 +21,10 @@ import { PayrollSection } from "./Payroll";
 import { ProfitSection, TechProfitSection } from "./Profit";
 import { RepairsSection } from "./Repairs";
 import { PromoSection } from "./Promo";
+import { ShiftingSection } from "./Shifting";
 
 export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
-  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo";
+  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo" | "shifting";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -33,6 +34,7 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "acs", label: "AC Assets", icon: "❄️", roles: ["Admin", "Service Coordinator"] },
     { id: "technicians", label: "Technicians", icon: "🧑‍🔧", roles: ["Admin", "Service Coordinator"] },
     { id: "repairs", label: "Repair Register", icon: "🔌", roles: ["Admin", "Service Coordinator", "Accounts"] },
+    { id: "shifting", label: "Shifting Inspections", icon: "🚚", roles: ["Admin", "Service Coordinator"] },
   ] },
   { group: "Money", items: [
     { id: "quotations", label: "Quotations", icon: "📝", roles: ["Admin", "Service Coordinator", "Accounts"] },
@@ -68,6 +70,7 @@ const TITLES: Record<Section, string> = {
   timesheets: "Time Sheets", calculators: "Copper Pipe & Tonnage Calculators", costrules: "Cost & Calculation Rules",
   repairs: "Repair Register — PCB Board · Stabilizer · Indoor Coil",
   promo: "Spare Parts Promo — Explore More at Pushpak",
+  shifting: "AC Shifting — Pre-Removal Inspections",
 };
 
 const SESSION_KEY = "prc:admin";
@@ -122,6 +125,7 @@ export default function AdminApp() {
     expenses: db.expenses.filter((e) => e.status === "Pending").length,
     repairs: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length,
     promo: (db.partEnquiries ?? []).filter((e) => e.status === "New").length,
+    shifting: (db.inspections ?? []).filter((i) => ["Submitted", "Awaiting Customer Approval", "On Hold – Unsafe"].includes(i.status)).length,
   };
 
   const sidebar = (
@@ -212,6 +216,7 @@ export default function AdminApp() {
             {current === "expenses" && <ExpensesSection db={db} who={who} notify={notify} />}
             {current === "timesheets" && <TimeSheetsSection db={db} who={who} notify={notify} />}
             {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
+            {current === "shifting" && <ShiftingSection db={db} who={who} notify={notify} />}
             {current === "promo" && <PromoSection db={db} who={who} notify={notify} />}
             {current === "repairs" && <RepairsSection db={db} who={who} notify={notify} />}
             {current === "costrules" && <CostRulesSection key={JSON.stringify(db.fin)} db={db} who={who} notify={notify} />}

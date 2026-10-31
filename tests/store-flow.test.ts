@@ -6,9 +6,11 @@ import {
   addExpense, approvePayroll, logCallback, reimburseExpense, requestCorrection, resetDemo, reviewCorrection, reviewExpense, reviewTime, saveCalc,
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
   addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus, createJob, changeJobSite, setStatus,
+  createInspection, saveInspectionDraft, submitInspection, recordCustomerAck, inspectionDecision,
 } from "@/app/lib/store";
 import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
+import { SPLIT_INDOOR, SPLIT_OUTDOOR, blankInspection, progress, submitProblems } from "@/app/lib/shifting";
 
 const db = (): Db => JSON.parse(localStorage.getItem("prc:db:v1")!);
 beforeAll(() => resetDemo());
@@ -153,5 +155,38 @@ describe("service address per booking", () => {
     expect(j().site!.area).toBe("Janakpuri");
     setStatus(id, "On the Way", "Admin");
     expect(changeJobSite(id, { ...site, area: "Rohini" }, "Rajesh Sharma")).toMatch(/on the way/);
+  });
+});
+
+describe("AC shifting — pre-removal inspection", () => {
+  it("16 split items default Not Checked; faults need remark + photo; safety gates approval; tech cannot self-approve", () => {
+    expect(SPLIT_INDOOR.length + SPLIT_OUTDOOR.length).toBe(16);
+    const d = blankInspection();
+    expect(progress(d)).toMatchObject({ done: 0, total: 16 });
+    const id = createInspection("t1", d);
+    expect(saveInspectionDraft(id, "t2", d)).toMatch(/assigned technician/);
+    d.customer = { name: "Kavita Rao", mobile: "9810011122", oldLocation: "C-5, Janakpuri, 2nd floor bedroom", newLocation: "" };
+    for (const it of [...SPLIT_INDOOR, ...SPLIT_OUTDOOR]) d.answers[it.key] = { value: it.ok[0], remark: "", photos: [] };
+    d.answers.condenser = { value: "Bent Fins", remark: "", photos: [] };
+    d.materials = { ...d.materials, copper: "Reusable After Inspection", bracket: "Reusable After Inspection", gas: "OK – No Charging Indicated" };
+    expect(submitProblems(d, { faultPhotoRequired: true }).join(" ")).toMatch(/describe the fault.*photo/);
+    d.answers.condenser = { value: "Bent Fins", remark: "Front face fins bent", photos: ["data:image/jpeg;base64,x"] };
+    expect(submitProblems(d, { faultPhotoRequired: true })).toEqual([]);
+    expect(saveInspectionDraft(id, "t1", d)).toBeNull();
+    expect(submitInspection(id, "t1", d)).toBeNull();
+    const x = () => db().inspections!.find((i) => i.id === id)!;
+    expect(x().status).toBe("Awaiting Customer Approval"); // existing fault → customer must acknowledge
+    expect(saveInspectionDraft(id, "t1", d)).toMatch(/submitted/);
+    expect(inspectionDecision(id, "Approved", "", "Admin")).toMatch(/Site safety/); // pending assessment blocks
+    expect(recordCustomerAck(id, { name: "Kavita Rao", method: "OTP", otp: "0000" }, "Rohit Kumar")).toMatch(/OTP/);
+    expect(recordCustomerAck(id, { name: "Kavita Rao", method: "OTP", otp: "1234" }, "Rohit Kumar")).toBeNull();
+    expect(inspectionDecision(id, "Correction", "", "Admin")).toMatch(/note/);
+    expect(inspectionDecision(id, "Correction", "Confirm site safety and isolation", "Admin")).toBeNull();
+    d.site = { ...d.site, safety: "Safe to Proceed", isolation: "Confirmed" };
+    d.customerAck = x().customerAck; d.materials.faultsExplained = "Approved / Acknowledged";
+    expect(submitInspection(id, "t1", d)).toBeNull();
+    expect(inspectionDecision(id, "Approved", "", "Admin")).toBeNull();
+    expect(x().status).toBe("Approved for Removal");
+    expect(x().audit.map((a) => a.action)).toContain("Removal authorised");
   });
 });

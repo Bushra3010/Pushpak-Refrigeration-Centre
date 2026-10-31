@@ -10,7 +10,7 @@
 
 import { useSyncExternalStore } from "react";
 import {
-  EMPTY_DIAGNOSIS, EMPTY_PREWORK, JOB_FLOW, acLabel, fmtDate, inr, isoDay, jobTotals, nowIso, seedDb, stepOf,
+  DEMO_OTP, EMPTY_DIAGNOSIS, EMPTY_PREWORK, JOB_FLOW, acLabel, fmtDate, inr, isoDay, jobTotals, nowIso, seedDb, stepOf,
   isOpen, type AcQuoteRequest, type AcUnit, type Complaint, type Customer, type Db, type Job, type JobStatus, type LeadStatus, type Part, type PayMethod,
   type PreWork, type QuoteLine, type ServiceSite, type Settings, type Technician, validateSite,
 } from "./data";
@@ -18,6 +18,7 @@ import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
 const KEY = "prc:db:v1";
@@ -1009,4 +1010,95 @@ export function changeJobSite(jobId: string, site: ServiceSite, by: string): Err
     if (j.techId) notify(d, `tech:${j.techId}`, "Address changed", `${j.id} · now at ${site.address}, ${site.area}`, j.id);
   });
   return err;
+}
+
+/* ───────────────────────── AC shifting — pre-removal inspection ───────────────────────── */
+
+const inspAudit = (x: ShiftingInspection, by: string, action: string, detail?: string) => x.audit.push({ at: nowIso(), by, action, detail });
+
+export function createInspection(techId: string, draft: InspectionDraft): string {
+  let id = "";
+  mutate((d) => {
+    d.inspections ??= [];
+    const t = d.techs.find((x) => x.id === techId);
+    id = `INS-${d.inspections.reduce((m, x) => Math.max(m, Number(x.id.slice(4)) || 200), 200) + 1}`;
+    const now = nowIso();
+    d.inspections.unshift({ ...structuredClone(draft), id, techId, techName: t?.name ?? techId, status: "Draft", createdAt: now, inspectedAt: now, office: null, audit: [{ at: now, by: t?.name ?? techId, action: "Draft started" }] });
+  });
+  return id;
+}
+
+/** Technician saves the draft — only their own, and only while it is editable. */
+export function saveInspectionDraft(id: string, techId: string, draft: InspectionDraft): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = d.inspections?.find((i) => i.id === id);
+    if (!x) { err = "Inspection not found."; return; }
+    if (x.techId !== techId) { err = "Only the assigned technician can edit this inspection."; return; }
+    if (x.status !== "Draft" && x.status !== "Correction Required") { err = "This inspection is submitted — ask the office to reopen it."; return; }
+    const changed = (["customer", "ac", "site", "materials"] as const).filter((k) => JSON.stringify(x[k]) !== JSON.stringify(draft[k]));
+    const prevP = progress(x).done;
+    Object.assign(x, structuredClone(draft), { inspectedAt: nowIso() });
+    if (changed.length || prevP !== progress(x).done) inspAudit(x, x.techName, "Draft saved", `${progress(x).done}/${progress(x).total} checked${changed.length ? ` · edited ${changed.join(", ")}` : ""}`);
+  });
+  return err;
+}
+
+export function submitInspection(id: string, techId: string, draft: InspectionDraft): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = d.inspections?.find((i) => i.id === id);
+    if (!x) { err = "Inspection not found."; return; }
+    if (x.techId !== techId) { err = "Only the assigned technician can submit this inspection."; return; }
+    if (x.status !== "Draft" && x.status !== "Correction Required") { err = "Already submitted."; return; }
+    const problems = submitProblems(draft, { faultPhotoRequired: d.inspectionRules?.faultPhotoRequired ?? true });
+    if (problems.length) { err = problems[0]; return; }
+    Object.assign(x, structuredClone(draft));
+    const now = nowIso();
+    x.submittedAt = now;
+    x.status = draft.site.safety === "Unsafe / Hold Work" ? "On Hold – Unsafe" : needsCustomerAck(x) && !x.customerAck ? "Awaiting Customer Approval" : "Submitted";
+    inspAudit(x, x.techName, "Submitted for office review", `${progress(x).faults.length} faults · safety ${x.site.safety}`);
+    notify(d, "admin", `Pre-removal inspection ${x.status === "On Hold – Unsafe" ? "· UNSAFE" : "submitted"}`, `${x.id} · ${x.customer.name} · ${x.ac.kind} ${x.ac.capacity} T`, x.jobId ?? undefined);
+  });
+  return err;
+}
+
+/** Customer acknowledgement of existing faults / extra charges (OTP in this demo). */
+export function recordCustomerAck(id: string, ack: { name: string; method: "OTP" | "Signature on paper" | "Recorded call"; otp?: string }, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = d.inspections?.find((i) => i.id === id);
+    if (!x) { err = "Inspection not found."; return; }
+    if (!ack.name.trim()) { err = "Enter the name of the person acknowledging."; return; }
+    if (ack.method === "OTP" && ack.otp !== DEMO_OTP) { err = "Wrong OTP."; return; }
+    x.customerAck = { name: ack.name.trim(), method: ack.method, at: nowIso() };
+    x.materials.faultsExplained = "Approved / Acknowledged";
+    if (x.status === "Awaiting Customer Approval") x.status = "Submitted";
+    inspAudit(x, by, "Customer acknowledged", `${ack.name} · ${ack.method}`);
+  });
+  return err;
+}
+
+/** Office decision. Approval is hard-gated by site safety, isolation and customer acknowledgement. */
+export function inspectionDecision(id: string, decision: "Approved" | "Hold" | "Correction" | "Reopen" | "Cancel", notes: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = d.inspections?.find((i) => i.id === id);
+    if (!x) { err = "Inspection not found."; return; }
+    if ((decision === "Correction" || decision === "Hold" || decision === "Cancel") && !notes.trim()) { err = "Write a note for the technician."; return; }
+    if (decision === "Approved") { const b = approvalBlockers(x); if (b.length) { err = b[0]; return; } }
+    const now = nowIso();
+    if (decision === "Reopen" || decision === "Correction") x.status = "Correction Required";
+    else if (decision === "Hold") x.status = "On Hold – Unsafe";
+    else if (decision === "Cancel") x.status = "Cancelled";
+    else x.status = "Approved for Removal";
+    x.office = { decision: decision === "Reopen" ? "Correction" : decision === "Cancel" ? "Hold" : decision, by, at: now, notes: notes.trim() };
+    inspAudit(x, by, decision === "Approved" ? "Removal authorised" : decision === "Reopen" ? "Reopened for edits" : decision === "Correction" ? "Correction requested" : decision === "Cancel" ? "Cancelled" : "Put on hold", notes.trim() || undefined);
+    notify(d, `tech:${x.techId}`, decision === "Approved" ? "Removal approved" : decision === "Cancel" ? "Inspection cancelled" : "Inspection needs attention", `${x.id} · ${x.customer.name}${notes.trim() ? ` — ${notes.trim()}` : ""}`);
+  });
+  return err;
+}
+
+export function setInspectionRules(rules: { faultPhotoRequired: boolean }, by: string) {
+  mutate((d) => { d.inspectionRules = rules; audit(d, by, "Inspection rules", `Fault photo required: ${rules.faultPhotoRequired ? "yes" : "no"}`); });
 }

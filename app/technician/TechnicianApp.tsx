@@ -7,6 +7,7 @@ import { JobDetailPage } from "./JobDetail";
 import { Dashboard, NotificationSheet, ProfileScreen, SearchScreen, StockScreen, TechLogin } from "./TechScreens";
 import { CalculatorsHub, parseRoute, routeOf } from "./calc/Hub";
 import { RepairsScreen } from "./Repairs";
+import { ShiftingScreen } from "./Shifting";
 
 const SESSION_KEY = "prc:tech";
 type Tab = "jobs" | "search" | "calc" | "stock" | "profile";
@@ -21,6 +22,7 @@ export default function TechnicianApp() {
   const [openJob, setOpenJob] = useState<string | null>(null);
   const [calcTool, setCalcTool] = useState<string | null>(null);
   const [repairs, setRepairs] = useState<{ on: boolean; id: string | null }>({ on: false, id: null });
+  const [shifting, setShifting] = useState<{ on: boolean; id: string | null }>({ on: false, id: null });
   const [bell, setBell] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,17 +33,19 @@ export default function TechnicianApp() {
   useEffect(() => {
     const sync = () => {
       const h = window.location.hash;
-      if (h.startsWith("#repairs")) { setRepairs({ on: true, id: h.slice("#repairs/".length) || null }); setOpenJob(null); return; }
-      setRepairs({ on: false, id: null });
+      if (h.startsWith("#repairs")) { setRepairs({ on: true, id: h.slice("#repairs/".length) || null }); setShifting({ on: false, id: null }); setOpenJob(null); return; }
+      if (h.startsWith("#shifting")) { setShifting({ on: true, id: h.slice("#shifting/".length) || null }); setRepairs({ on: false, id: null }); setOpenJob(null); return; }
+      setRepairs({ on: false, id: null }); setShifting({ on: false, id: null });
       const r = parseRoute(h); if (r.hub) { setTab("calc"); setCalcTool(r.tool); setOpenJob(null); } else setCalcTool(null);
     };
     sync();
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
-  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }); }, [tab, openJob, calcTool, repairs]);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }); }, [tab, openJob, calcTool, repairs, shifting.on]);
   const openRepairs = (id: string | null) => { window.location.hash = id ? `#repairs/${id}` : "#repairs"; };
-  const closeRepairs = () => { history.replaceState(null, "", window.location.pathname + window.location.search); setRepairs({ on: false, id: null }); };
+  const closeRepairs = () => { history.replaceState(null, "", window.location.pathname + window.location.search); setRepairs({ on: false, id: null }); setShifting({ on: false, id: null }); };
+  const openShifting = (id: string | null) => { window.location.hash = id ? `#shifting/${id}` : "#shifting"; };
   const goTab = (t: Tab) => {
     setTab(t);
     if (t === "calc") window.location.hash = routeOf(null);
@@ -69,13 +73,15 @@ export default function TechnicianApp() {
   const unread = inbox.filter((n) => !n.read).length;
   // Technicians only see jobs assigned to them (PRD §15).
   const job = openJob ? db.jobs.find((j) => j.id === openJob && (j.techId === tech.id || (j.helpers ?? []).includes(tech.id))) : undefined;
-  const showNav = !job && !repairs.on;
+  const showNav = !job && !repairs.on && !shifting.on;
   const logout = () => { writeSession(null); setTechId(null); goTab("jobs"); setOpenJob(null); };
 
   return (
     <PhoneShell role="technician">
       <div ref={scrollRef} className="no-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", paddingBottom: showNav ? "calc(76px + env(safe-area-inset-bottom))" : undefined }}>
-        {repairs.on ? (
+        {shifting.on ? (
+          <ShiftingScreen db={db} tech={tech} inspectionId={shifting.id} onOpen={openShifting} onBack={closeRepairs} flash={flash} />
+        ) : repairs.on ? (
           <RepairsScreen db={db} tech={tech} entryId={repairs.id} onOpen={openRepairs} onBack={closeRepairs} flash={flash} />
         ) : job ? (
           <JobDetailPage key={job.id} db={db} job={job} tech={tech} onBack={() => setOpenJob(null)} flash={flash} />
@@ -83,7 +89,7 @@ export default function TechnicianApp() {
           <>
             {tab === "jobs" && (
               <Dashboard db={db} tech={tech} unread={unread} onOpen={setOpenJob} onBell={() => setBell(true)}
-                onSearch={() => goTab("search")} onStock={() => goTab("stock")} onCalc={(id) => { setTab("calc"); openCalc(id ?? null); }} onRepairs={() => openRepairs(null)}
+                onSearch={() => goTab("search")} onStock={() => goTab("stock")} onCalc={(id) => { setTab("calc"); openCalc(id ?? null); }} onRepairs={() => openRepairs(null)} onShifting={() => openShifting(null)}
                 onToggleDuty={(on) => { updateTech(tech.id, { availability: on ? "Available" : "Off Duty" }, tech.name); flash(on ? "You're on duty" : "You're off duty"); }} />
             )}
             {tab === "search" && <SearchScreen db={db} tech={tech} onOpenJob={setOpenJob} />}
