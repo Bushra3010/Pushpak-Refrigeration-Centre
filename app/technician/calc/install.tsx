@@ -82,6 +82,11 @@ export function CopperPipe({ ctx }: { ctx: Ctx }) {
   const { v, set } = calc;
   const upd = (i: number, p: Partial<PipeV>) => set({ pipes: v.pipes.map((x, j) => (j === i ? { ...x, ...p } : x)) });
   return <CalcShell ctx={ctx} calc={calc} form={<>
+    <a href="#calculators/copper-solver" className="press" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "12px 14px", borderRadius: 12, border: "2px solid var(--gold)", background: "linear-gradient(160deg,#262626,#0c0c0c)", color: "#fff", textDecoration: "none" }}>
+      <span aria-hidden style={{ fontSize: 22 }}>📐</span>
+      <span style={{ flex: 1 }}><b style={{ display: "block", fontSize: 13.5 }}>Find wall / gauge, total weight, total length or price</b><span style={{ fontSize: 11.5, color: "#cfcfcf" }}>Open Copper Pipe Solver — price per kg, foot or metre</span></span>
+      <span aria-hidden style={{ color: "var(--gold)", fontSize: 18 }}>›</span>
+    </a>
     {v.pipes.map((p, i) => { const st = f.gauges.find((g) => g.id === p.gaugeStd); return (
       <Box key={i} title={`${p.label} line`}>
         <Sel l="Preset (ASTM B280)" value="" onChange={(x) => { const pr = PIPE_PRESETS.find((y) => y.label === x); if (pr) upd(i, { od: String(pr.odMm), odUnit: "mm", mode: "mm", wall: String(pr.wallMm) }); }} options={[["", "Choose a preset…"], ...PIPE_PRESETS.map((x) => [x.label, x.label] as [string, string])]} />

@@ -107,6 +107,7 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSe
           { icon: "🧮", label: "All Calculators", onClick: () => onCalc() },
           { icon: "％", label: "GST Calculator", onClick: () => onCalc("gst") },
           { icon: "📏", label: "Unit Converter", onClick: () => onCalc("unit-converter") },
+          { icon: "🟠", label: "Copper Pipe Solver", onClick: () => onCalc("copper-solver") },
           ...(onRepairs ? [{ icon: "🔌", label: "Repair Register", onClick: onRepairs, count: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length }] : []),
           ...(onSearch ? [{ icon: "👥", label: "My Customers", onClick: onSearch }] : []),
           ...(onStock ? [{ icon: "📦", label: "Van Stock", onClick: onStock }] : []),
