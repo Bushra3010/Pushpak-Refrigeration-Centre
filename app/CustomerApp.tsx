@@ -12,7 +12,7 @@ import {
 } from "./customer/Screens";
 import { PhoneShell, PillNav, Toast } from "./components/ui";
 import type { AcDraft } from "./components/service";
-import { useDb, addAc, addCustomer, cancelJob, createJob, decideQuote, markRead, rateJob, recordPayment, resetDemo, updateAc, updateCustomer } from "./lib/store";
+import { useDb, addAc, addCustomer, cancelJob, createJob, decideQuote, markRead, rateJob, recordPayment, updateAc, updateCustomer } from "./lib/store";
 
 const SESSION_KEY = "prc:customer";
 
@@ -183,8 +183,7 @@ export default function CustomerApp() {
         {!detail && tab === "acs" && <AcsScreen db={db} me={me} onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} />}
         {!detail && tab === "bookings" && <BookingsScreen db={db} me={me} onOpenJob={(id) => push({ k: "job", id })} onBook={() => push({ k: "book" })} />}
         {!detail && tab === "profile" && (
-          <ProfileScreen db={db} me={me} unread={unread} onMenu={openMenu} onLogout={logout}
-            onReset={() => { resetDemo(); logout(); }} />
+          <ProfileScreen db={db} me={me} unread={unread} onMenu={openMenu} onLogout={logout} />
         )}
       </div>
 

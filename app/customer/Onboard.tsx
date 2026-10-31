@@ -5,7 +5,7 @@ import { BrandMark, Wordmark } from "../components/Brand";
 import { ArrowRight, PinIcon, SnowIcon } from "../components/icons";
 import { AcForm, EMPTY_AC, type AcDraft } from "../components/service";
 import { Chips, Footer, PageHeader, PrimaryButton, field, label, small } from "../components/ui";
-import { CUSTOMER_DEMO_PHONE, DEMO_OTP, type CustomerType, type ContactPref } from "../lib/data";
+import { DEMO_OTP, type CustomerType, type ContactPref } from "../lib/data";
 import type { NewCustomer } from "../lib/store";
 
 /** First visit introduction. */
@@ -54,7 +54,7 @@ export function LoginScreen({ onVerified }: { onVerified: (phone: string) => voi
             <input id="c-phone" inputMode="numeric" autoComplete="tel-national" value={phone} disabled={sent} placeholder="98765 43210"
               onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setErr(null); }} style={{ ...field, flex: 1 }} />
           </div>
-          {!sent && <p style={{ margin: "6px 2px 0", fontSize: 11.5, color: "var(--ink-mute)" }}>Demo: {CUSTOMER_DEMO_PHONE} is Rajesh Sharma (existing customer). Any other number signs up as new.</p>}
+          {!sent && <p style={{ margin: "6px 2px 0", fontSize: 11.5, color: "var(--ink-mute)" }}>New here? Enter your mobile number — you&apos;ll set up your profile after the OTP.</p>}
           {sent && (
             <div className="fade-up" style={{ marginTop: 16 }}>
               <label style={label} htmlFor="c-otp">OTP sent to +91 {phone}</label>

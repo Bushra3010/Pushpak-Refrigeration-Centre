@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { fmtDateTime, inr, type Db, type Settings } from "../lib/data";
-import { markRead, resetDemo, updateService, updateSettings } from "../lib/store";
+import { markRead, resetDemo, startFresh, updateService, updateSettings } from "../lib/store";
 import { Badge, Btn, Filter, Modal, Panel, SearchBox, Table, fieldLabel, input, muted } from "./kit";
 
 /* ───────────────────────── Notifications ───────────────────────── */
@@ -74,7 +74,7 @@ const ACCESS: [string, string, string, string, string][] = [
 export function SettingsSection({ db, who, notify }: { db: Db; who: string; notify: (m: string) => void }) {
   const [s, setS] = useState<Settings>(db.settings);
   const [prices, setPrices] = useState<Record<string, string>>({});
-  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmReset, setConfirmReset] = useState<false | "clear" | "sample">(false);
   const dirty = JSON.stringify(s) !== JSON.stringify(db.settings);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
   const num = (v: string) => Number(v.replace(/\D/g, "")) || 0;
@@ -128,13 +128,16 @@ export function SettingsSection({ db, who, notify }: { db: Db; who: string; noti
         <p style={{ ...muted, padding: "10px 16px" }}>Switch role from the top bar to preview what each role sees. Real enforcement happens server-side (Supabase row-level security) once the backend is connected. Sessions time out after 30 minutes idle.</p>
       </Panel>
 
-      <Panel title="Demo data">
-        <p style={{ margin: "0 0 10px", fontSize: 13 }}>All three apps share this browser&apos;s demo data. Reset to restore the original customers, jobs and stock.</p>
-        <Btn kind="danger" onClick={() => setConfirmReset(true)}>Reset demo data</Btn>
+      <Panel title="Data">
+        <p style={{ margin: "0 0 10px", fontSize: 13 }}>All three apps share this browser&apos;s data. The app now starts empty so you can add real customers, bookings and repairs. Technicians, prices, parts and settings are kept.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn kind="danger" onClick={() => setConfirmReset("clear")}>Clear all data (fresh start)</Btn>
+          <Btn kind="ghost" onClick={() => setConfirmReset("sample")}>Load sample data</Btn>
+        </div>
       </Panel>
       {confirmReset && (
-        <Modal title="Reset demo data?" onClose={() => setConfirmReset(false)} footer={<><Btn kind="ghost" onClick={() => setConfirmReset(false)}>Cancel</Btn><Btn kind="danger" onClick={() => { resetDemo(); setConfirmReset(false); setS(db.settings); notify("Demo data reset"); }}>Reset</Btn></>}>
-          <p style={{ margin: 0, fontSize: 13.5 }}>Every change made in the customer app, technician app and admin panel in this browser will be lost.</p>
+        <Modal title={confirmReset === "clear" ? "Clear all data?" : "Load sample data?"} onClose={() => setConfirmReset(false)} footer={<><Btn kind="ghost" onClick={() => setConfirmReset(false)}>Cancel</Btn><Btn kind="danger" onClick={() => { if (confirmReset === "clear") startFresh(); else resetDemo(); setConfirmReset(false); setS(db.settings); notify(confirmReset === "clear" ? "All data cleared — fresh start" : "Sample data loaded"); }}>{confirmReset === "clear" ? "Clear" : "Load samples"}</Btn></>}>
+          <p style={{ margin: 0, fontSize: 13.5 }}>{confirmReset === "clear" ? "Every customer, AC, booking, payment, repair, enquiry and inspection in this browser will be deleted. Technicians, prices, parts and settings stay." : "Everything in this browser is replaced with sample customers, bookings, repairs and inspections for a demo walkthrough."}</p>
         </Modal>
       )}
     </div>

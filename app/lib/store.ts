@@ -16,13 +16,14 @@ import {
 } from "./data";
 import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
-import { upgradeDb, withFinanceSeed } from "./finance-seed";
+import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
 const KEY = "prc:db:v1";
-const fresh = () => withFinanceSeed(seedDb());
+const sample = () => withFinanceSeed(seedDb());
+const fresh = () => cleanDb(sample());
 
 let state: Db | null = null;
 const listeners = new Set<() => void>();
@@ -464,7 +465,15 @@ export function markRead(to: string, id?: string) {
   mutate((d) => d.notifications.forEach((n) => { if (n.to === to && (!id || n.id === id)) n.read = true; }));
 }
 
+/** Load the sample customers, jobs, repairs… (demo walkthroughs and tests). */
 export function resetDemo() {
+  state = sample();
+  persist();
+  emit();
+}
+
+/** Clear every customer, booking and record; keep technicians, prices, stock and settings. */
+export function startFresh() {
   state = fresh();
   persist();
   emit();

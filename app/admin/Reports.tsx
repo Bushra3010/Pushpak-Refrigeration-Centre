@@ -75,7 +75,7 @@ export function ReportsSection({ db }: { db: Db }) {
   const days = Array.from({ length: 14 }, (_, i) => isoDay(i - 13));
   const series = days.map((d, i) => {
     const live = db.jobs.filter((j) => isDone(j) && j.date === d).reduce((t, j) => t + tot(j).total, 0);
-    return { d, v: i >= 11 ? live : REVENUE_HISTORY[i] + live };
+    return { d, v: i >= 11 || db.clean ? live : REVENUE_HISTORY[i] + live };
   });
   const max = Math.max(1, ...series.map((x) => x.v));
 

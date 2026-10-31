@@ -178,7 +178,7 @@ const jobTechs = (j: Job) => [j.techId, ...(j.helpers ?? [])].filter((x): x is s
 
 /** Data saved by an older demo version has no finance collections — add the demo ones. */
 /** Saved-data schema version. Bump and add a step below whenever the shape of saved demo data changes. */
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 /** Upgrades data saved by older versions of the demo, step by step, keeping every customer, job, estimate and setting. */
 export function upgradeDb(db: Db): Db {
@@ -187,6 +187,8 @@ export function upgradeDb(db: Db): Db {
   // v2 → v3: repair register (keep any entries already saved)
   if (!Array.isArray(db.repairs)) db = { ...db, repairs: seedRepairs(isoDay, `${isoDay(0)}T09:10:00`) };
   // v3 → v4: spare-parts promo banners + enquiries (keep any already saved)
+  // v5 → v6: sample records removed — the shared demo now starts empty (Admin → Settings can load samples)
+  if (v < 6 && !db.clean) db = cleanDb(db);
   // v4 → v5: AC shifting pre-removal inspections
   if (!Array.isArray(db.inspections)) db = { ...db, inspections: seedInspections(`${isoDay(0)}T10:15:00`), inspectionRules: db.inspectionRules ?? { faultPhotoRequired: true } };
   if (!Array.isArray(db.promoBanners)) { const p = seedPromo(`${isoDay(0)}T09:00:00`); db = { ...db, promoBanners: p.banners, partEnquiries: db.partEnquiries ?? p.enquiries }; }
@@ -201,3 +203,16 @@ export function upgradeDb(db: Db): Db {
   return { ...db, fin, techPrefs: db.techPrefs ?? {}, version: DB_VERSION };
 }
 
+
+/** Clean start: keep setup (technicians, services & prices, parts & stock, settings, salary setup, holidays,
+ * calculator rules, spare-parts banners) and drop every sample record, so real users can try the apps from empty. */
+export function cleanDb(db: Db): Db {
+  return {
+    ...db,
+    customers: [], acs: [], jobs: [], notifications: [], audit: [], leads: {},
+    timeLogs: [], corrections: [], expenses: [], advances: [], incentives: [], deductions: [], attendance: [], payrollRuns: [], calcs: [],
+    acQuotes: [], repairs: [], partEnquiries: [], inspections: [], techPrefs: {},
+    techs: (db.techs ?? []).map((t) => ({ ...t, availability: "Available" })),
+    clean: true,
+  };
+}

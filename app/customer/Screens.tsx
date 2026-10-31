@@ -263,7 +263,7 @@ export function AcEditPage({ initial, title, onBack, onSave }: { initial?: AcDra
 
 export type ProfileKey = "edit" | "acs" | "bookings" | "amc" | "payments" | "notifications" | "help" | "about";
 
-export function ProfileScreen({ db, me, unread, onMenu, onLogout, onReset }: { db: Db; me: Customer; unread: number; onMenu: (k: ProfileKey) => void; onLogout: () => void; onReset: () => void }) {
+export function ProfileScreen({ db, me, unread, onMenu, onLogout }: { db: Db; me: Customer; unread: number; onMenu: (k: ProfileKey) => void; onLogout: () => void; onReset?: () => void }) {
   const jobs = myJobs(db, me);
   const spend = jobs.reduce((t, j) => t + jobTotals(j, db.settings).paid, 0);
   const items: { k: ProfileKey; label: string; Icon: typeof EditIcon; badge?: number }[] = [
@@ -308,7 +308,6 @@ export function ProfileScreen({ db, me, unread, onMenu, onLogout, onReset }: { d
         <button onClick={onLogout} className="press" style={{ ...card, width: "100%", marginTop: 12, padding: 14, border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--error-text)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
           <LogoutIcon s={18} c="var(--error-text)" /> Log out
         </button>
-        <button onClick={onReset} style={{ display: "block", margin: "14px auto 0", background: "none", border: "1px dashed var(--line-strong)", borderRadius: 10, padding: "6px 12px", fontSize: 11.5, color: "var(--ink-mute)", cursor: "pointer" }}>Demo: reset all demo data</button>
       </div>
     </div>
   );

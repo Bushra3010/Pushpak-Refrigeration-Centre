@@ -339,6 +339,8 @@ export interface Db {
   /** AC shifting — pre-removal inspections (app/lib/shifting.ts) */
   inspections?: ShiftingInspection[];
   inspectionRules?: { faultPhotoRequired: boolean };
+  /** true once the sample records were cleared (fresh start) */
+  clean?: boolean;
   /** saved-data schema version (see upgradeDb) */
   version?: number;
 }

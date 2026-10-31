@@ -168,6 +168,7 @@ describe("saved browser data migration", () => {
     const v2 = db();
     const v1 = structuredClone(v2) as Db & Record<string, unknown>;
     delete v1.version; delete v1.techPrefs; delete (v1.fin as Partial<typeof v1.fin>).tools;
+    v1.clean = true; // a browser already on the clean start keeps its own records
     v1.settings.company = "Edited Co";
     v1.jobs[0].lines.push({ id: "keep", kind: "Service", name: "Kept line", qty: 1, price: 123 });
     const up = upgradeDb(v1);
@@ -179,6 +180,19 @@ describe("saved browser data migration", () => {
     expect(up.customers).toHaveLength(v2.customers.length);
     expect(up.jobs[0].lines.at(-1)!.id).toBe("keep");
     expect(upgradeDb(up)).toBe(up); // idempotent
+  });
+  it("old browsers still holding the sample records are cleared once; setup is kept", () => {
+    const old = structuredClone(db()) as Db;
+    old.version = 5; delete old.clean;
+    const up = upgradeDb(old);
+    expect(up.customers).toEqual([]);
+    expect(up.jobs).toEqual([]);
+    expect(up.repairs).toEqual([]);
+    expect(up.techs.length).toBe(old.techs.length);
+    expect(up.services.length).toBe(old.services.length);
+    expect(up.parts.length).toBe(old.parts.length);
+    expect(up.promoBanners!.length).toBe(5);
+    expect(up.clean).toBe(true);
   });
   it("keeps edited calculator settings when filling new keys", () => {
     const v1 = structuredClone(db());
