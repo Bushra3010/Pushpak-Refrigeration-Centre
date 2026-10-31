@@ -12,7 +12,8 @@ import { SiteForm, siteFromProfile } from "./SiteForm";
 import type { NewJob } from "../lib/store";
 import { NewAcBanner } from "./Sizing";
 
-const STEPS = ["Select AC", "Problem", "History", "Address & time"];
+const STEPS = ["Select AC", "Problem", "History", "Your address", "Date & time"];
+const LAST = STEPS.length - 1;
 
 /** Book service: AC → complaint in the customer's words → previous history → date & slot. */
 export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSizing }: {
@@ -34,7 +35,7 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
 
   const toggle = (i: ComplaintIssue) => setIssues((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]));
   const days = Array.from({ length: 7 }, (_, i) => isoDay(i));
-  const canNext = [!!acId, issues.length > 0 && (issues.length > 1 || issues[0] !== "Other" || notes.trim().length > 3), true, !!slot][step];
+  const canNext = [!!acId, issues.length > 0 && (issues.length > 1 || issues[0] !== "Other" || notes.trim().length > 3), true, true, !!slot][step];
 
   const submit = () => { setTried(true); if (siteErr || !slot) return; onSubmit({
     customerId: me.id, acId, date, slot, source: "Customer App", site,
@@ -44,7 +45,7 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
 
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
-      <PageHeader title="Book Service" sub={`Step ${step + 1} of 4 · ${STEPS[step]}`} onBack={step === 0 || (initialAc && step === 1) ? onBack : () => setStep(step - 1)} />
+      <PageHeader title="Book Service" sub={`Step ${step + 1} of ${STEPS.length} · ${STEPS[step]}`} onBack={step === 0 || (initialAc && step === 1) ? onBack : () => setStep(step - 1)} />
       <div style={{ display: "flex", gap: 6, padding: "0 16px 14px" }}>
         {STEPS.map((s, i) => <span key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? "var(--blue)" : "var(--line)" }} />)}
       </div>
@@ -102,10 +103,16 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
 
         {step === 3 && (
           <>
-            <div style={{ ...card, padding: 14, marginBottom: 16 }}>
+            <p style={{ ...small, margin: "0 0 12px" }}>Where should the technician come? Use your saved address or enter a different one.</p>
+            <div style={{ ...card, padding: 14 }}>
               <SiteForm me={me} value={site} onChange={setSite} saveDefault={saveDefault} onSaveDefault={setSaveDefault} />
               {tried && siteErr && <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{siteErr}</p>}
             </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
             <span style={label}>Date</span>
             <div className="no-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
               {days.map((d, i) => {
@@ -135,10 +142,10 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
       </div>
 
       <Footer>
-        {step < 3
+        {step < LAST
           ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <PrimaryButton disabled={!canNext} onClick={() => setStep(step + 1)}>Next</PrimaryButton>
+              <PrimaryButton disabled={!canNext} onClick={() => { if (step === 3) { setTried(true); if (siteErr) return; } setStep(step + 1); }}>Next</PrimaryButton>
               {step === 2 && <button onClick={() => { setPre({ ...EMPTY_PREWORK }); setStep(3); }} style={{ background: "none", border: "none", color: "var(--ink-soft)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 6 }}>Skip — the technician will ask</button>}
             </div>
           )

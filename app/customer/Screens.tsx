@@ -39,11 +39,8 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
       <AppHeader onBell={onNotifications} unread={unread} />
       <Hello name={first} sub={`Good ${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"} · ${acs.length} AC${acs.length === 1 ? "" : "s"} registered`} />
 
-      <BannerCarousel banners={[
-        { title: <>Summer<br />Ready AC</>, text: "Jet-pump deep cleaning, gas check & cooling test", cta: "Book Now", art: "❄️", onClick: () => onBook() },
-        { title: <>AMC<br />Care Plan</>, text: `3 services a year + priority repairs from ${inr(db.settings.amcBasic)}/AC`, cta: "View Plans", art: "🛡️", onClick: onAmc },
-        ...(onSizing ? [{ title: <>Buy the<br />Right AC</>, text: "Find the right tonnage for your room in 1 minute", cta: "Find My AC", art: "🏠", onClick: onSizing }] : []),
-      ]} />
+      {/* Hero: spare-parts promo slider — managed in Admin → Spare Parts Promo */}
+      {flash && <div style={{ padding: "0 16px" }}><ExploreMore db={db} me={me} flash={flash} hero /></div>}
 
       <GoldTiles tiles={[
         { icon: "🛠️", label: "Book Service", onClick: () => onBook() },
@@ -102,8 +99,14 @@ export function HomeScreen({ db, me, unread, onBook, onOpenJob, onOpenAc, onAddA
             body={`Regular cleaning every ${Math.round(db.settings.reminderDays / 30)} months keeps cooling strong and bills low.`} cta="Book" onClick={() => onBook(due[0].id)} />
         )}
 
-        {/* Spare-parts promo slider — customer home only, managed in Admin → Spare Parts Promo */}
-        {flash && <ExploreMore db={db} me={me} flash={flash} />}
+        <SectionHead title="Offers & Services" />
+        <div style={{ margin: "0 -16px" }}>
+        <BannerCarousel banners={[
+          { title: <>Summer<br />Ready AC</>, text: "Jet-pump deep cleaning, gas check & cooling test", cta: "Book Now", art: "❄️", onClick: () => onBook() },
+          { title: <>AMC<br />Care Plan</>, text: `3 services a year + priority repairs from ${inr(db.settings.amcBasic)}/AC`, cta: "View Plans", art: "🛡️", onClick: onAmc },
+          ...(onSizing ? [{ title: <>Buy the<br />Right AC</>, text: "Find the right tonnage for your room in 1 minute", cta: "Find My AC", art: "🏠", onClick: onSizing }] : []),
+        ]} />
+        </div>
 
         {/* Popular service — Bada Business style feature card */}
         <SectionHead title="Popular Services" onAll={() => onBook()} />
@@ -167,18 +170,30 @@ export function JobRow({ db, job, onOpen }: { db: Db; job: Job; onOpen: () => vo
 
 /* ───────────────────────── Bookings tab ───────────────────────── */
 
-export function BookingsScreen({ db, me, onOpenJob, onBack }: { db: Db; me: Customer; onOpenJob: (id: string) => void; onBack?: () => void }) {
+export function BookingsScreen({ db, me, onOpenJob, onBack, onBook }: { db: Db; me: Customer; onOpenJob: (id: string) => void; onBack?: () => void; onBook?: () => void }) {
   const [tab, setTab] = useState<"active" | "past">("active");
   const jobs = myJobs(db, me);
   const rows = jobs.filter((j) => (tab === "active" ? isOpen(j) || (j.invoice && jobTotals(j, db.settings).due > 0) : !isOpen(j) && !(j.invoice && jobTotals(j, db.settings).due > 0)));
   return (
     <div>
-      <PageHeader title="My Bookings" onBack={onBack} />
+      <PageHeader title="My Bookings" onBack={onBack} right={onBook ? (
+        <button onClick={onBook} className="press" style={{ border: "none", borderRadius: 999, padding: "8px 14px", background: "#111", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>＋ New Booking</button>
+      ) : undefined} />
       <div style={{ padding: "0 16px" }}>
+        {onBook && (
+          <button onClick={onBook} className="press" style={{ ...card, width: "100%", marginBottom: 12, padding: 14, border: "2px solid var(--gold)", background: "linear-gradient(160deg,#262626,#0c0c0c)", color: "#fff", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}>
+            <span aria-hidden style={{ width: 42, height: 42, borderRadius: 21, background: "var(--gold)", color: "#111", display: "grid", placeItems: "center", fontSize: 24, fontWeight: 800, flexShrink: 0 }}>＋</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>Book a new service</span>
+              <span style={{ display: "block", fontSize: 12, color: "#cfcfcf" }}>Choose AC, problem, your address, date &amp; time</span>
+            </span>
+            <span aria-hidden style={{ fontSize: 20, color: "var(--gold)" }}>›</span>
+          </button>
+        )}
         <Tabs value={tab} onChange={setTab} tabs={[{ id: "active", label: "Active" }, { id: "past", label: "Service history" }]} />
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
           {rows.map((j) => <JobRow key={j.id} db={db} job={j} onOpen={() => onOpenJob(j.id)} />)}
-          {rows.length === 0 && <Empty>{tab === "active" ? "No active bookings. Your ACs are happy!" : "No past services yet."}</Empty>}
+          {rows.length === 0 && <Empty>{tab === "active" ? "No active bookings. Tap “Book a new service” above to book one." : "No past services yet."}</Empty>}
         </div>
       </div>
     </div>

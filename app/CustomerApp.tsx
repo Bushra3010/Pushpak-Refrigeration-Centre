@@ -167,7 +167,7 @@ export default function CustomerApp() {
           <NotificationsPage items={inbox} onBack={back} onReadAll={() => markRead(`customer:${me!.id}`)}
             onOpen={(n) => { markRead(`customer:${me!.id}`, n.id); if (n.jobId) push({ k: "job", id: n.jobId }); }} />
         )}
-        {detail?.k === "bookings" && <BookingsScreen db={db} me={me} onBack={back} onOpenJob={(id) => push({ k: "job", id })} />}
+        {detail?.k === "bookings" && <BookingsScreen db={db} me={me} onBack={back} onOpenJob={(id) => push({ k: "job", id })} onBook={() => push({ k: "book" })} />}
         {detail?.k === "amc" && <AmcPage db={db} me={me} onBack={back} onBook={() => push({ k: "book" })} />}
         {detail?.k === "payments" && <PaymentsPage db={db} me={me} onBack={back} onOpenJob={(id) => push({ k: "job", id })} />}
         {detail?.k === "info" && <InfoPage which={detail.which} db={db} onBack={back} />}
@@ -181,7 +181,7 @@ export default function CustomerApp() {
             onAmc={() => push({ k: "amc" })} onAllJobs={() => goTab("bookings")} onSizing={() => push({ k: "sizing" })} flash={flash} />
         )}
         {!detail && tab === "acs" && <AcsScreen db={db} me={me} onOpenAc={(id) => push({ k: "ac", id })} onAddAc={() => push({ k: "addAc" })} />}
-        {!detail && tab === "bookings" && <BookingsScreen db={db} me={me} onOpenJob={(id) => push({ k: "job", id })} />}
+        {!detail && tab === "bookings" && <BookingsScreen db={db} me={me} onOpenJob={(id) => push({ k: "job", id })} onBook={() => push({ k: "book" })} />}
         {!detail && tab === "profile" && (
           <ProfileScreen db={db} me={me} unread={unread} onMenu={openMenu} onLogout={logout}
             onReset={() => { resetDemo(); logout(); }} />

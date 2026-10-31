@@ -32,7 +32,7 @@ export function SpareSlide({ b, onEnquire }: { b: PromoBanner; onEnquire?: () =>
   );
 }
 
-export function ExploreMore({ db, me, flash }: { db: Db; me: Customer; flash: (m: string) => void }) {
+export function ExploreMore({ db, me, flash, hero }: { db: Db; me: Customer; flash: (m: string) => void; hero?: boolean }) {
   const banners = liveBanners(db.promoBanners);
   const ref = useRef<HTMLDivElement>(null);
   const [i, setI] = useState(0);
@@ -52,9 +52,9 @@ export function ExploreMore({ db, me, flash }: { db: Db; me: Customer; flash: (m
 
   if (!banners.length) return null;
   return (
-    <section aria-label="Explore More at Pushpak" style={{ marginTop: 6 }}>
-      <div className="bb-section"><h3>Explore More at Pushpak</h3></div>
-      <p style={{ ...small, margin: "-6px 0 10px" }}>Spare parts for all your home appliances — not just AC.</p>
+    <section aria-label="Explore More at Pushpak" style={{ marginTop: hero ? 0 : 6 }}>
+      <div className="bb-section" style={hero ? { margin: "0 0 8px" } : undefined}><h3>Explore More at Pushpak</h3></div>
+      <p style={{ ...small, margin: "-4px 0 10px" }}>Spare parts for all your home appliances — not just AC.</p>
       <div ref={ref} className="no-scroll" onTouchStart={() => setPaused(true)} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onScroll={(e) => { const el = e.currentTarget; setI(Math.round(el.scrollLeft / el.clientWidth)); }}
         style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", borderRadius: 14 }}>
