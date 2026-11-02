@@ -1,27 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { RoomArt } from "../components/RoomArt";
 import { BrandMark, Wordmark } from "../components/Brand";
-import { ArrowRight, PinIcon, SnowIcon } from "../components/icons";
+import { ArrowRight, PinIcon, ShieldIcon, WrenchIcon } from "../components/icons";
 import { AcForm, EMPTY_AC, type AcDraft } from "../components/service";
 import { Chips, Footer, PageHeader, PrimaryButton, field, label, small } from "../components/ui";
 import { DEMO_OTP, type CustomerType, type ContactPref } from "../lib/data";
 import type { NewCustomer } from "../lib/store";
 
+/** Catchy lines that rotate on the welcome screen — one promise each, short enough for a phone. */
+export const WELCOME_LINES: { eyebrow: string; title: string; text: string }[] = [
+  { eyebrow: "EXPERT AC CARE AT YOUR DOORSTEP", title: "Better Cooling\nStarts Here.", text: "Book AC service, repairs & installation with trusted professionals." },
+  { eyebrow: "GARMI KO BOLO BYE-BYE", title: "Thanda Ghar.\nSukoon Bhara Mann.", text: "Jet-pump deep cleaning that brings back the chill — and lowers your bill." },
+  { eyebrow: "AAPKA AC, HAMARI ZIMMEDARI", title: "One Tap.\nTechnician on the Way.", text: "Pick a time slot, track your technician live, approve the price before work starts." },
+  { eyebrow: "NO SURPRISES, ONLY SOLUTIONS", title: "Clear Prices.\nCool Results.", text: "See the quotation first, pay only for what you approve — GST bill every time." },
+  { eyebrow: "CARE THAT REMEMBERS", title: "Every AC.\nEvery Service. Saved.", text: "Full history of each AC, service reminders and AMC plans in one app." },
+];
+export const SINCE_YEAR = 2001;
+
 /** First visit introduction. */
 export function SplashScreen({ onStart }: { onStart: () => void }) {
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = setInterval(() => setI((n) => (n + 1) % WELCOME_LINES.length), 3800); return () => clearInterval(t); }, []);
+  const line = WELCOME_LINES[i];
   return (
-    <div className="welcome-screen">
-      <div style={{ display: "flex", alignItems: "center", gap: 11 }}><BrandMark size={44} /><Wordmark light /></div>
-      <div className="cooling-art" aria-hidden="true"><div className="ac-illustration"><span /><i /><i /><i /></div><div className="air-line" /><div className="air-line" /><div className="air-line" /><SnowIcon s={40} c="#e8b23a" w={1.2} /></div>
-      <div style={{ position: "relative" }}>
-        <p className="eyebrow" style={{ color: "#e8b23a" }}>WELCOME TO BETTER AC CARE</p>
-        <h1>Keep your cool.<br />We’ll take care<br />of the rest.</h1>
-        <p className="welcome-copy">Book a service, track your technician, and keep every AC running at its best.</p>
+    <div style={{ position: "absolute", inset: 0, zIndex: 200, overflowY: "auto", background: "linear-gradient(180deg,#f6f8f7 0%,#eef3f1 100%)", display: "flex", flexDirection: "column", padding: "22px 20px calc(18px + env(safe-area-inset-bottom))" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <BrandMark size={46} />
+        <div style={{ flex: 1, lineHeight: 1.05 }}>
+          <p style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#111", letterSpacing: "-0.02em" }}>Pushpak</p>
+          <p style={{ margin: "2px 0 0", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", color: "var(--gold-dark)" }}>REFRIGERATION CENTRE</p>
+        </div>
+        <span style={{ fontSize: 12.5, color: "var(--ink-soft)", fontWeight: 500 }}>Since {SINCE_YEAR}</span>
       </div>
-      <div style={{ marginTop: "auto", paddingTop: 26 }}>
-        <PrimaryButton tone="gold" onClick={onStart}>Get Started <ArrowRight s={18} c="white" /></PrimaryButton>
-        <p style={{ color: "#b6ced5", fontSize: 10, textAlign: "center", margin: "14px 0 0" }}>SERVICE · REPAIRS · INSTALLATION · AMC</p>
+
+      <div style={{ marginTop: 18, padding: 8, borderRadius: 24, background: "#e7efec", boxShadow: "0 10px 28px rgba(17,17,17,.08)" }}>
+        <div style={{ position: "relative", borderRadius: 18, overflow: "hidden" }}>
+          <RoomArt />
+          <span style={{ position: "absolute", left: 10, bottom: 10, padding: "5px 11px", borderRadius: 999, background: "rgba(17,17,17,.62)", color: "#fff", fontSize: 11, fontWeight: 700, backdropFilter: "blur(6px)" }}>❄ Cool home, calm mind</span>
+        </div>
+      </div>
+
+      <div key={i} className="fade-up" style={{ marginTop: 18, minHeight: 168 }} aria-live="polite">
+        <p style={{ margin: 0, fontSize: 11.5, fontWeight: 800, letterSpacing: ".1em", color: "var(--gold-dark)" }}>{line.eyebrow}</p>
+        <h1 style={{ margin: "8px 0 0", fontSize: "clamp(28px, 8vw, 36px)", lineHeight: 1.12, fontWeight: 700, letterSpacing: "-0.03em", color: "#111", whiteSpace: "pre-line" }}>{line.title}</h1>
+        <p style={{ margin: "10px 0 0", fontSize: 14.5, lineHeight: 1.55, color: "var(--ink-soft)" }}>{line.text}</p>
+      </div>
+      <div style={{ display: "flex", gap: 6, margin: "4px 0 16px" }} aria-hidden>
+        {WELCOME_LINES.map((_, n) => <span key={n} onClick={() => setI(n)} style={{ cursor: "pointer", height: 6, width: n === i ? 18 : 6, borderRadius: 3, background: n === i ? "#111" : "#cfd5d3", transition: "width .2s" }} />)}
+      </div>
+
+      <div style={{ marginTop: "auto" }}>
+        <PrimaryButton tone="gold" onClick={onStart} style={{ fontSize: 17, padding: "17px 18px", borderRadius: 18 }}>Book AC Service <ArrowRight s={20} c="#111" /></PrimaryButton>
+        <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 14, fontSize: 13, fontWeight: 600, color: "#2b2f36", flexWrap: "wrap" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><ShieldIcon s={16} c="var(--gold-dark)" /> Trusted Since {SINCE_YEAR}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><WrenchIcon s={16} c="var(--gold-dark)" /> Expert Technicians</span>
+        </div>
+        <div style={{ height: 1, background: "#dde3e1", margin: "16px 0 12px" }} />
+        <p style={{ margin: 0, textAlign: "center", fontSize: 11.5, letterSpacing: ".06em", color: "var(--ink-mute)" }}>AC SALES • SERVICE • REPAIRS • SPARE PARTS</p>
       </div>
     </div>
   );
