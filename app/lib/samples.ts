@@ -39,11 +39,26 @@ export interface SupplierContact {
   note: string;
 }
 
+/** Full customer details at the counter. A new mobile number creates a customer profile on receive. */
+export interface SampleCustomer {
+  customerId: string | null;
+  name: string;
+  phone: string;
+  altPhone?: string;
+  address: string;
+  area?: string;
+  landmark?: string;
+  gps?: string; // "lat,lng"
+  type?: "Residential" | "Office" | "Shop" | "Commercial" | "Other";
+  contactPref?: "Call" | "WhatsApp";
+}
+export const CUSTOMER_TYPES = ["Residential", "Office", "Shop", "Commercial", "Other"] as const;
+
 export interface SampleEnquiry {
   id: string;            // PRC-SMP-0001
   receivedAt: string;
   receivedBy: string;
-  customer: { name: string; phone: string; address: string; customerId: string | null };
+  customer: SampleCustomer;
   appliance: Appliance;
   brand: string;
   model: string;
@@ -67,13 +82,19 @@ export interface SampleEnquiry {
 export type SampleDraft = Pick<SampleEnquiry, "customer" | "appliance" | "brand" | "model" | "part" | "partNo" | "qty" | "storage" | "condition" | "notes" | "photos">;
 
 export const emptySample = (): SampleDraft => ({
-  customer: { name: "", phone: "", address: "", customerId: null },
+  customer: { name: "", phone: "", altPhone: "", address: "", area: "", landmark: "", gps: "", type: "Residential", contactPref: "WhatsApp", customerId: null },
   appliance: "AC", brand: "", model: "", part: "", partNo: "", qty: 1, storage: "", condition: "", notes: "", photos: [],
 });
 
 export function validateSample(d: SampleDraft): string | null {
   if (!/^[6-9]\d{9}$/.test(d.customer.phone.replace(/\D/g, "").slice(-10))) return "Enter the customer's 10-digit mobile number.";
   if (!d.customer.name.trim()) return "Enter the customer name.";
+  if (d.customer.altPhone && !/^[6-9]\d{9}$/.test(d.customer.altPhone.replace(/\D/g, "").slice(-10))) return "Alternate number must be 10 digits.";
+  if (!d.customer.customerId) {
+    if (d.customer.address.trim().length < 8) return "Enter the customer's full address (house / flat, street, city).";
+    if (!(d.customer.area ?? "").trim()) return "Enter the area / locality.";
+  }
+  if (d.customer.gps && !/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(d.customer.gps)) return "Location pin must look like 28.5921, 77.0460 — or leave it empty.";
   if (!d.brand.trim()) return "Enter the brand.";
   if (!d.part.trim()) return "Choose or type the part name.";
   if (!(d.qty >= 1 && Number.isInteger(d.qty))) return "Quantity must be a whole number, 1 or more.";

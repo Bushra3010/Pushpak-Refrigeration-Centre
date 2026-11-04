@@ -4,7 +4,7 @@ import { useState } from "react";
 import { shrinkPhoto } from "../components/repair";
 import { fmtDate, fmtDateTime, isoDay, type Db } from "../lib/data";
 import {
-  APPLIANCES, APPLIANCE_NAME, CLOSE_REASONS, CUSTOMER_TEMPLATES, PARTS, SAMPLE_STATUSES, SUPPLIER_RESPONSES, SUPPLIER_TEMPLATES,
+  APPLIANCES, APPLIANCE_NAME, CLOSE_REASONS, CUSTOMER_TYPES, type SampleCustomer, CUSTOMER_TEMPLATES, PARTS, SAMPLE_STATUSES, SUPPLIER_RESPONSES, SUPPLIER_TEMPLATES,
   customerMessage, customerUpdateDue, emptySample, isOpenSample, latestSupplier, suggestedCustomerTemplate, supplierFollowUpDue, supplierMessage, validateSample,
   type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SampleStatus, type SupplierContact, type SupplierResponse, type SupplierTemplate,
 } from "../lib/samples";
@@ -52,7 +52,7 @@ export function SamplesSection({ db, who, notify }: { db: Db; who: string; notif
         <div style={{ padding: "12px 16px 0" }}><Filter options={FILTERS} value={f} onChange={setF} counts={counts} /></div>
         <Table<SampleEnquiry> rowKey={(s) => s.id} rows={rows} empty="No samples here. Use “Receive New Sample” when a customer brings a part." cols={[
           { key: "id", head: "Sample", render: (s) => <div><b>{s.id}</b><div style={muted}>{fmtDateTime(s.receivedAt)}{s.storage ? ` · ${s.storage}` : ""}</div></div> },
-          { key: "cust", head: "Customer", render: (s) => <div>{s.customer.name}<div style={muted}>{s.customer.phone}</div></div> },
+          { key: "cust", head: "Customer", render: (s) => <div>{s.customer.name}<div style={muted}>{s.customer.phone}{s.customer.area ? ` · ${s.customer.area}` : ""}{s.customer.gps ? <> · <a href={`https://maps.google.com/?q=${s.customer.gps}`} target="_blank" rel="noreferrer">Map</a></> : null}</div></div> },
           { key: "part", head: "Part", render: (s) => <div><b>{s.part}</b> × {s.qty}<div style={muted}>{APPLIANCE_NAME[s.appliance]} · {s.brand}{s.model ? ` ${s.model}` : ""}</div></div> },
           { key: "sup", head: "Supplier", render: (s) => { const l = latestSupplier(s); return l ? <div>{l.name}<div><Badge tone={RESP_TONE[l.response]}>{l.response}</Badge></div></div> : <span style={muted}>Not asked yet</span>; } },
           { key: "due", head: "Due", render: (s) => !isOpenSample(s) ? <span style={muted}>—</span> : <div style={{ fontSize: 12 }}>
@@ -106,7 +106,7 @@ function ReceiveTab({ db, s, who, onSaved }: { db: Db; s?: SampleEnquiry; who: s
   const phone = (v: string) => {
     const p = v.replace(/\D/g, "").slice(0, 10);
     const c = p.length === 10 ? db.customers.find((x) => x.phone === p && !x.mergedInto) : undefined;
-    set({ customer: { ...d.customer, phone: p, customerId: c?.id ?? null, ...(c && !d.customer.name ? { name: c.name } : {}), ...(c && !d.customer.address ? { address: c.address } : {}) } });
+    set({ customer: c ? fromProfile(c) : { ...d.customer, phone: p, customerId: null } });
   };
   const partList = PARTS[d.appliance];
   const save = () => {
@@ -117,10 +117,10 @@ function ReceiveTab({ db, s, who, onSaved }: { db: Db; s?: SampleEnquiry; who: s
   };
   return (
     <div>
-      <L t="Customer mobile" req><input inputMode="tel" value={d.customer.phone} onChange={(e) => phone(e.target.value)} placeholder="10-digit mobile" style={input} /></L>
-      <p style={{ ...muted, margin: "-6px 0 10px", color: known ? "var(--success-text)" : undefined }}>{known ? `✓ Existing customer — name and address filled from their profile` : "Existing customer hone par name aur address auto-fill honge."}</p>
-      <L t="Customer name" req><input value={d.customer.name} onChange={(e) => set({ customer: { ...d.customer, name: e.target.value } })} style={input} /></L>
-      <L t="Address (optional)"><input value={d.customer.address} onChange={(e) => set({ customer: { ...d.customer, address: e.target.value } })} style={input} /></L>
+      <p style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 800 }}>1. Customer information</p>
+      <CustomerPicker db={db} value={d.customer} onChange={(c) => set({ customer: c })} onPhone={phone} known={known} />
+      <p style={{ ...muted, margin: "-2px 0 14px" }}>Sample received date: <b>{fmtDate(s?.receivedAt ?? isoDay(0))}</b> · system date</p>
+      <p style={{ margin: "4px 0 10px", fontSize: 15, fontWeight: 800 }}>2. Part details</p>
       <span style={fieldLabel}>Appliance <span style={{ color: "var(--red)" }}>*</span></span>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "4px 0 12px" }}>
         {APPLIANCES.map((a) => <label key={a} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}><input type="radio" checked={d.appliance === a} onChange={() => set({ appliance: a, part: "" })} style={{ width: 17, height: 17, accentColor: "#111" }} /> {a}</label>)}
@@ -159,6 +159,80 @@ function ReceiveTab({ db, s, who, onSaved }: { db: Db; s?: SampleEnquiry; who: s
       {!s && <Info icon="🕑" title="Supplier response: 2 days">Sample receive hone par supplier follow-up aur customer update due date automatically ban jayegi.</Info>}
       {err && <p role="alert" style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
       <Btn onClick={save}>{s ? "Save Changes" : "📦 Receive Sample & Continue"}</Btn>
+    </div>
+  );
+}
+
+const fromProfile = (c: Db["customers"][number]): SampleCustomer => ({
+  customerId: c.id, name: c.name, phone: c.phone, altPhone: c.altPhone, address: c.address, area: c.area, landmark: "", gps: c.gps, type: c.type, contactPref: c.contactPref,
+});
+
+/** Customer 360: find an existing customer by mobile or name, or enter a new customer's full details. */
+function CustomerPicker({ db, value, onChange, onPhone, known }: { db: Db; value: SampleCustomer; onChange: (c: SampleCustomer) => void; onPhone: (v: string) => void; known?: Db["customers"][number] }) {
+  const [q, setQ] = useState("");
+  const [locMsg, setLocMsg] = useState("");
+  const set = (p: Partial<SampleCustomer>) => onChange({ ...value, ...p });
+  const n = q.trim().toLowerCase();
+  const hits = n.length >= 2 ? db.customers.filter((c) => !c.mergedInto && `${c.name} ${c.phone} ${c.area}`.toLowerCase().includes(n)).slice(0, 5) : [];
+  const linked = value.customerId ? db.customers.find((c) => c.id === value.customerId) : known;
+  const locate = () => {
+    if (!("geolocation" in navigator)) { setLocMsg("Location not available on this device — paste the pin from Google Maps instead."); return; }
+    setLocMsg("Finding location…");
+    navigator.geolocation.getCurrentPosition((p) => { set({ gps: `${p.coords.latitude.toFixed(5)},${p.coords.longitude.toFixed(5)}` }); setLocMsg("✓ Location pinned (use this only when the customer is at their address)."); }, () => setLocMsg("Could not get location — paste the pin from Google Maps instead."), { timeout: 8000 });
+  };
+
+  if (linked) {
+    const acs = db.acs.filter((a) => a.customerId === linked.id);
+    const jobs = db.jobs.filter((j) => j.customerId === linked.id);
+    const samples = (db.samples ?? []).filter((s) => s.customer.customerId === linked.id);
+    return (
+      <div style={{ background: "var(--surface-dim)", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div>
+            <b style={{ fontSize: 15 }}>👤 {linked.name}</b> <Badge tone="green">Existing customer</Badge>
+            <div style={{ fontSize: 13, marginTop: 4 }}>+91 {linked.phone}{linked.altPhone ? ` / ${linked.altPhone}` : ""} · prefers {linked.contactPref} · {linked.type}</div>
+            <div style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 2 }}>{linked.address}{linked.area ? `, ${linked.area}` : ""}{linked.gps && <> · <a href={`https://maps.google.com/?q=${linked.gps}`} target="_blank" rel="noreferrer">Map ↗</a></>}</div>
+            <div style={{ ...muted, marginTop: 6 }}>Customer 360°: {acs.length} appliance{acs.length === 1 ? "" : "s"} · {jobs.length} service job{jobs.length === 1 ? "" : "s"} · {samples.length} sample{samples.length === 1 ? "" : "s"}{linked.amc ? ` · AMC ${linked.amc.plan}` : ""}</div>
+          </div>
+          <Btn small kind="ghost" onClick={() => onChange(emptySample().customer)}>Change</Btn>
+        </div>
+        <L t="Landmark / note for this sample"><input value={value.landmark ?? ""} onChange={(e) => set({ landmark: e.target.value })} placeholder="Optional" style={input} /></L>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <L t="Search existing customer (mobile or name)">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Type 2+ letters or digits" style={input} />
+        {hits.length > 0 && (
+          <div style={{ border: "1px solid var(--line)", borderRadius: 10, marginTop: 4, overflow: "hidden" }}>
+            {hits.map((c) => <button key={c.id} type="button" onClick={() => { onChange(fromProfile(c)); setQ(""); }} style={{ display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: "1px solid var(--line)", background: "#fff", padding: "8px 12px", cursor: "pointer", fontSize: 13 }}><b>{c.name}</b> · {c.phone}<span style={muted}> · {c.area}</span></button>)}
+          </div>
+        )}
+      </L>
+      <div style={{ background: "var(--info-bg)", color: "var(--info-text)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 12 }}>Not found? Fill in the full details below — a new customer profile is created when you receive the sample.</div>
+      <div className="form-grid">
+        <L t="Customer mobile" req><input inputMode="tel" value={value.phone} onChange={(e) => onPhone(e.target.value)} placeholder="10-digit mobile" style={input} /></L>
+        <L t="Alternate number"><input inputMode="tel" value={value.altPhone ?? ""} onChange={(e) => set({ altPhone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="Optional" style={input} /></L>
+      </div>
+      <L t="Customer name" req><input value={value.name} onChange={(e) => set({ name: e.target.value })} placeholder="Full name" style={input} /></L>
+      <L t="Full address" req><textarea rows={2} value={value.address} onChange={(e) => set({ address: e.target.value })} placeholder="House / flat no., building, street, city, PIN" style={{ ...input, resize: "vertical" }} /></L>
+      <div className="form-grid">
+        <L t="Area / locality" req><input value={value.area ?? ""} onChange={(e) => set({ area: e.target.value })} placeholder="e.g. Anna Nagar" style={input} /></L>
+        <L t="Landmark"><input value={value.landmark ?? ""} onChange={(e) => set({ landmark: e.target.value })} placeholder="Near…" style={input} /></L>
+      </div>
+      <L t="Location pin (lat, lng)">
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={value.gps ?? ""} onChange={(e) => set({ gps: e.target.value })} placeholder="Paste from Google Maps, e.g. 13.0850, 80.2101" style={input} />
+          <Btn small kind="ghost" onClick={locate}>📍 Use current</Btn>
+        </div>
+        {locMsg && <span style={muted}>{locMsg}</span>}
+      </L>
+      <div className="form-grid">
+        <L t="Customer type"><select value={value.type ?? "Residential"} onChange={(e) => set({ type: e.target.value as SampleCustomer["type"] })} style={input}>{CUSTOMER_TYPES.map((t) => <option key={t}>{t}</option>)}</select></L>
+        <L t="Preferred contact"><select value={value.contactPref ?? "WhatsApp"} onChange={(e) => set({ contactPref: e.target.value as SampleCustomer["contactPref"] })} style={input}><option>WhatsApp</option><option>Call</option></select></L>
+      </div>
     </div>
   );
 }
@@ -246,6 +320,10 @@ function CustomerTab({ db, s, who, notify, onBack }: { db: Db; s: SampleEnquiry;
   const due = customerUpdateDue(s, today);
   return (
     <div>
+      <div style={{ background: "var(--surface-dim)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
+        <b>👤 {s.customer.name}</b> · +91 {s.customer.phone}{s.customer.altPhone ? ` / ${s.customer.altPhone}` : ""}{s.customer.contactPref ? ` · prefers ${s.customer.contactPref}` : ""}
+        <div style={{ color: "var(--ink-soft)", marginTop: 2 }}>{s.customer.address}{s.customer.area ? `, ${s.customer.area}` : ""}{s.customer.landmark ? ` · near ${s.customer.landmark}` : ""}{s.customer.gps && <> · <a href={`https://maps.google.com/?q=${s.customer.gps}`} target="_blank" rel="noreferrer">Map ↗</a></>}</div>
+      </div>
       <b style={{ fontSize: 16 }}>Customer WhatsApp update</b>
       <L t="Customer message template"><select value={tpl} onChange={(e) => setTpl(e.target.value as CustomerTemplate)} style={{ ...input, marginTop: 8 }}>{CUSTOMER_TEMPLATES.map((x) => <option key={x}>{x}</option>)}</select></L>
       <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13.5, lineHeight: 1.55, background: "var(--surface-dim)", borderRadius: 12, padding: 14, margin: "0 0 12px" }}>{msg}</pre>

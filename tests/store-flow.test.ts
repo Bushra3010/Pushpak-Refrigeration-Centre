@@ -198,8 +198,16 @@ describe("AC shifting — pre-removal inspection", () => {
 
 describe("counter: spare-part sample enquiries", () => {
   it("receive → supplier enquiry → response → customer update, with 2-day due dates", () => {
-    const d = { ...emptySample(), customer: { name: "Rajesh Kumar", phone: "9876543210", address: "", customerId: null }, appliance: "WM" as const, brand: "IFB", model: "Senator 6 kg", part: "Water Inlet Valve", storage: "Rack A / Bin 01" };
+    const d = { ...emptySample(), customer: { ...emptySample().customer, name: "Rajesh Kumar", phone: "9876543210", customerId: "c1" }, appliance: "WM" as const, brand: "IFB", model: "Senator 6 kg", part: "Water Inlet Valve", storage: "Rack A / Bin 01" };
     expect(receiveSample({ ...d, part: "" }, "Counter")).toEqual({ error: expect.stringMatching(/part/) });
+    // a new mobile number needs full details and creates a customer profile
+    const newCust = { ...emptySample().customer, name: "Kumar S", phone: "9840101130" };
+    expect(receiveSample({ ...d, customer: newCust }, "Counter")).toEqual({ error: expect.stringMatching(/full address/) });
+    expect(receiveSample({ ...d, customer: { ...newCust, address: "12, 2nd Street, Anna Nagar, Chennai 600040", area: "Anna Nagar", gps: "bad" } }, "Counter")).toEqual({ error: expect.stringMatching(/Location pin/) });
+    const nr = receiveSample({ ...d, customer: { ...newCust, address: "12, 2nd Street, Anna Nagar, Chennai 600040", area: "Anna Nagar", gps: "13.0850, 80.2101", altPhone: "9840000001" } }, "Counter") as { id: string };
+    const created = db().customers.find((c) => c.phone === "9840101130")!;
+    expect(created).toMatchObject({ name: "Kumar S", area: "Anna Nagar", gps: "13.0850,80.2101", altPhone: "9840000001", status: "New" });
+    expect(db().samples!.find((s) => s.id === nr.id)!.customer.customerId).toBe(created.id);
     const r = receiveSample(d, "Counter") as { id: string };
     expect(r.id).toMatch(/^PRC-SMP-\d{4}$/);
     const x = () => db().samples!.find((s) => s.id === r.id)!;

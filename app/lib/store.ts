@@ -1131,10 +1131,20 @@ export function receiveSample(draft: SampleDraft, by: string): { id: string } | 
     id = `PRC-SMP-${String(n).padStart(4, "0")}`;
     const now = nowIso(), day = now.slice(0, 10);
     const phone = draft.customer.phone.replace(/\D/g, "").slice(-10);
-    const cust = d.customers.find((c) => c.phone === phone && !c.mergedInto);
+    let cust = d.customers.find((c) => c.id === draft.customer.customerId && !c.mergedInto) ?? d.customers.find((c) => c.phone === phone && !c.mergedInto);
+    // Customer 360: a new mobile number gets a full customer profile right away.
+    if (!cust) {
+      const k = draft.customer;
+      cust = {
+        id: `c${++d.seq}`, name: k.name.trim(), phone, altPhone: (k.altPhone ?? "").replace(/\D/g, "").slice(-10), address: k.address.trim(), area: (k.area ?? "").trim(),
+        gps: (k.gps ?? "").replace(/\s/g, ""), type: k.type ?? "Residential", status: "New", contactPref: k.contactPref ?? "WhatsApp", createdAt: now, amc: null,
+      };
+      d.customers.unshift(cust);
+      audit(d, by, "Customer created", `${cust.name} · ${phone} (sample counter)`);
+    }
     d.samples.unshift({
       ...structuredClone(draft), id, receivedAt: now, receivedBy: by,
-      customer: { ...draft.customer, phone, customerId: cust?.id ?? null },
+      customer: { ...draft.customer, phone, customerId: cust.id, name: draft.customer.name.trim() || cust.name, address: draft.customer.address.trim() || cust.address, area: draft.customer.area || cust.area, gps: draft.customer.gps || cust.gps },
       supplierDue: addDays(day, 2), customerDue: addDays(day, 2), suppliers: [], customerUpdates: [], customerReply: "Pending",
       status: "Received", closeReason: "", timeline: [{ at: now, by, text: `Sample received${draft.storage ? ` — kept at ${draft.storage}` : ""}` }],
     });
