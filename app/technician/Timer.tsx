@@ -5,7 +5,8 @@ import { BottomSheet, PrimaryButton, card, field, label, sectionTitle, small } f
 import { fmtDateTime, inr, isOpen, isoDay, type Db, type Job, type Technician } from "../lib/data";
 import { fmtH, fmtMonth, logHours } from "../lib/finance";
 import { EXPENSE_CATEGORIES, type Expense, type TimeLog } from "../lib/finance-types";
-import { addExpense, requestCorrection, timerAction, type TimerAction } from "../lib/store";
+import { addExpense, fieldRulesOf, requestCorrection, timerAction, type TimerAction } from "../lib/store";
+import { breakToday } from "../lib/field";
 
 const clock = (since: string, now: number) => {
   const s = Math.max(0, Math.floor((now - new Date(since.length === 16 ? `${since}:00` : since).getTime()) / 1000));
@@ -46,6 +47,7 @@ export function TimerCard({ db, job, tech, flash }: { db: Db; job: Job; tech: Te
       ) : <p style={small}>Job is {job.status} — timer closed.</p>}
       {running && !here && isOpen(job) && <p style={{ ...small, color: "var(--warning-text)" }}>Starting here stops your other running timer first — time never overlaps.</p>}
       <p style={{ ...small, marginTop: 10 }}>My time here: work {fmtH(total("Work"))} · travel {fmtH(total("Travel"))} · break {fmtH(total("Break"))}. Wrong time? Request a correction in Profile → My hours.</p>
+      {(() => { const lim = fieldRulesOf(db).maxBreakMin; const b = breakToday(db.timeLogs, tech.id, isoDay(0)); return lim > 0 ? <p style={{ ...small, marginTop: 4, fontWeight: 600, color: b.minutes > lim ? "var(--error-text)" : "var(--ink-soft)" }}>Break today: {b.minutes} / {lim} min{b.minutes > lim ? " — over the daily limit" : ""}</p> : null; })()}
       <button onClick={() => setClaim(true)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: "var(--blue)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>+ Add expense for this job (petrol, food, fare…)</button>
       {claim && <ClaimSheet db={db} tech={tech} jobId={job.id} onClose={() => setClaim(false)} flash={flash} />}
     </div>

@@ -18,6 +18,7 @@ import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { DEFAULT_FIELD_RULES, distanceM, newVisitOtp, parseGps, type FieldRules } from "./field";
 import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
@@ -166,6 +167,8 @@ export function createJob(input: NewJob, by: string): string {
       id, customerId: input.customerId, acId: input.acId, techId: null, status: "New Request",
       priority: input.priority ?? "Normal", source: input.source, createdAt: nowIso(), date: input.date, slot: input.slot,
       ...(input.site ? { site: { ...input.site, contactPhone: input.site.contactPhone.replace(/\D/g, "").slice(-10) } } : {}),
+      category: d.acs.find((a) => a.id === input.acId)?.category ?? "AC",
+      visitOtp: newVisitOtp(), calls: [],
       complaint: input.complaint, preWork: input.preWork ?? { ...EMPTY_PREWORK }, customerVerified: false,
       diagnosis: { ...EMPTY_DIAGNOSIS }, lines: [], discount: 0, quote: null,
       work: { serviceType: "", before: "", after: "", remarks: "" }, invoice: null, payments: [], followUp: null, notes: [],
@@ -1240,5 +1243,80 @@ export function reopenSample(id: string, by: string) {
     x.status = r === "Part Available" ? "Part Found" : x.suppliers.length ? "Supplier Enquired" : "Received";
     x.closeReason = "";
     smpLog(x, by, "Reopened");
+  });
+}
+
+/* ───────────────────────── Field rules: location, arrival radius, visit OTP, calls ───────────────────────── */
+
+export const fieldRulesOf = (d: Pick<Db, "fieldRules">): FieldRules => ({ ...DEFAULT_FIELD_RULES, ...(d.fieldRules ?? {}) });
+
+export function setFieldRules(patch: Partial<FieldRules>, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const next = { ...fieldRulesOf(d), ...patch };
+    if (!next.categories.length) { err = "Keep at least one service category."; return; }
+    if (!(next.geofenceM >= 10 && next.geofenceM <= 5000)) { err = "Arrival radius must be 10–5000 metres."; return; }
+    if (!(next.nearbyKm > 0 && next.nearbyKm <= 100)) { err = "Nearby radius must be 1–100 km."; return; }
+    if (!(next.maxBreakMin >= 0 && next.maxBreakMin <= 480)) { err = "Break limit must be 0–480 minutes."; return; }
+    d.fieldRules = next;
+    audit(d, by, "Field rules", `categories ${next.categories.join(", ")} · radius ${next.geofenceM} m · nearby ${next.nearbyKm} km · OTP ${next.visitOtp ? "on" : "off"} · in-app call ${next.inAppCall ? "on" : "off"} · break ${next.maxBreakMin} min`);
+  });
+  return err;
+}
+
+/** Technician app shares its position while on duty. */
+export function setTechLocation(techId: string, lat: number, lng: number) {
+  mutate((d) => { const t = d.techs.find((x) => x.id === techId); if (t) t.loc = { lat, lng, at: nowIso() }; });
+}
+
+/** "I've arrived" — only within the arrival radius of the site, unless the technician gives a reason. */
+export function markArrived(jobId: string, techId: string, pos: { lat: number; lng: number } | null, override: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const j = d.jobs.find((x) => x.id === jobId);
+    if (!j) { err = "Job not found."; return; }
+    if (j.techId !== techId && !(j.helpers ?? []).includes(techId)) { err = "Not your job."; return; }
+    const rules = fieldRulesOf(d);
+    const c = d.customers.find((x) => x.id === j.customerId);
+    const site = parseGps(j.site?.gps || c?.gps);
+    const dist = pos && site ? distanceM(pos, site) : null;
+    if (dist != null && dist > rules.geofenceM && !override.trim()) { err = `You are ${Math.round(dist)} m from the customer's location — move within ${rules.geofenceM} m, or give a reason.`; return; }
+    if (pos == null && !override.trim()) { err = "Location not available — turn on location, or give a reason."; return; }
+    const t = d.techs.find((x) => x.id === techId);
+    if (t && pos) t.loc = { ...pos, at: nowIso() };
+    j.arrival = { distanceM: dist, ...(override.trim() ? { override: override.trim() } : {}), at: nowIso() };
+    j.arrivedAt = nowIso();
+    stamp(j, "Arrived", by, dist != null ? `${Math.round(dist)} m from site${override.trim() ? ` — override: ${override.trim()}` : ""}` : override.trim() ? `No location — ${override.trim()}` : "Customer location not pinned");
+    notify(d, `customer:${j.customerId}`, "Technician has arrived", rules.visitOtp ? `${t?.name ?? "Your technician"} is at your door. Share your visit OTP to start the work.` : `${t?.name ?? "Your technician"} is at your door.`, j.id);
+    if (dist != null && dist > rules.geofenceM) notify(d, "admin", "Arrival outside radius", `${j.id} · ${Math.round(dist)} m · ${override.trim()}`, j.id);
+  });
+  return err;
+}
+
+/** Customer's visit OTP, entered by the technician on arrival. */
+export function verifyVisitOtp(jobId: string, code: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const j = d.jobs.find((x) => x.id === jobId);
+    if (!j) { err = "Job not found."; return; }
+    if (!j.visitOtp) j.visitOtp = newVisitOtp();
+    if (code.trim() !== j.visitOtp) { err = "Wrong OTP — ask the customer for the 4-digit visit code in their app."; return; }
+    j.customerVerified = true;
+    j.otpVerifiedAt = nowIso();
+    j.notes.push({ at: nowIso(), by, text: "Visit OTP verified" });
+  });
+  return err;
+}
+
+/** Customer gets (or regenerates) a visit OTP for an older booking. */
+export function ensureVisitOtp(jobId: string) {
+  mutate((d) => { const j = d.jobs.find((x) => x.id === jobId); if (j && !j.visitOtp) j.visitOtp = newVisitOtp(); });
+}
+
+export function logCall(jobId: string | null, from: string, to: string, seconds: number) {
+  mutate((d) => {
+    const j = jobId ? d.jobs.find((x) => x.id === jobId) : undefined;
+    const entry = { id: uid(), at: nowIso(), jobId, from, to, seconds: Math.max(0, Math.round(seconds)), via: "In-app" as const };
+    if (j) (j.calls ??= []).push(entry);
   });
 }

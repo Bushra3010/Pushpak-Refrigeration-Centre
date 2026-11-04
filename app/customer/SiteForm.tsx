@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PinIcon } from "../components/icons";
 import { card, field, label, small } from "../components/ui";
 import type { Customer, ServiceSite } from "../lib/data";
+import { AREA_TYPES, CONGESTED_CHECKLIST, FLOORS, PROPERTY_TYPES } from "../lib/field";
 
 /* Service address for one booking: the saved address, or another one (office, parents' home…). */
 
@@ -62,6 +63,38 @@ export function SiteForm({ me, value, onChange, saveDefault, onSaveDefault }: {
       </button>
       {gpsMsg && <p style={{ ...small, marginTop: 6 }}>{gpsMsg}</p>}
 
+      {/* Property identification */}
+      <p style={{ ...label, margin: "16px 0 6px" }}>Property type</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {PROPERTY_TYPES.map((t) => (
+          <button key={t} type="button" onClick={() => set({ propertyType: t })} aria-pressed={value.propertyType === t} style={{ border: value.propertyType === t ? "1.5px solid #111" : "1.5px solid var(--line-strong)", background: value.propertyType === t ? "#111" : "#fff", color: value.propertyType === t ? "#fff" : "var(--ink)", borderRadius: 10, padding: "9px 8px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>📍 {t}</button>
+        ))}
+      </div>
+      <label style={{ display: "block", margin: "10px 0" }}><span style={label}>Building / apartment / complex name</span>
+        <input aria-label="Building name" value={value.building ?? ""} onChange={(e) => set({ building: e.target.value })} placeholder="e.g. ABC Apartments / Jain Complex" style={field} /></label>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <label><span style={label}>Flat / shop / unit no.</span><input aria-label="Unit number" value={value.unit ?? ""} onChange={(e) => set({ unit: e.target.value })} placeholder="e.g. B-204" style={field} /></label>
+        <label><span style={label}>Floor</span><select aria-label="Floor" value={value.floor ?? ""} onChange={(e) => set({ floor: e.target.value })} style={field}><option value="">Select</option>{FLOORS.map((f) => <option key={f}>{f}</option>)}</select></label>
+      </div>
+      <p style={{ ...label, margin: "12px 0 6px" }}>Lift available?</p>
+      <div style={{ display: "flex", gap: 18 }}>
+        {(["Yes", "No", "Not Sure"] as const).map((o) => <label key={o} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}><input type="radio" name="lift" checked={value.lift === o} onChange={() => set({ lift: o })} style={{ width: 17, height: 17, accentColor: "#111" }} /> {o}</label>)}
+      </div>
+      <p style={{ ...label, margin: "12px 0 6px" }}>Area type</p>
+      <div style={{ display: "flex", gap: 8 }}>
+        {AREA_TYPES.map((a) => <button key={a} type="button" onClick={() => set({ areaType: a, congested: a === "Congested Area" ? value.congested ?? [] : [] })} aria-pressed={(value.areaType ?? "Standard Area") === a} style={{ flex: 1, border: (value.areaType ?? "Standard Area") === a ? "1.5px solid #111" : "1.5px solid var(--line-strong)", background: (value.areaType ?? "Standard Area") === a ? "#111" : "#fff", color: (value.areaType ?? "Standard Area") === a ? "#fff" : "var(--ink)", borderRadius: 10, padding: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{a}</button>)}
+      </div>
+      {(value.areaType ?? "Standard Area") === "Standard Area"
+        ? <p style={{ ...small, marginTop: 6 }}>✓ Standard area selected. The congested-area checklist opens only for Congested Area.</p>
+        : (
+          <div style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "var(--gold-tint)" }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 700, color: "var(--gold-dark)" }}>Tick what applies — the technician plans for it</p>
+            {CONGESTED_CHECKLIST.map((c) => <label key={c} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "3px 0", cursor: "pointer" }}><input type="checkbox" checked={(value.congested ?? []).includes(c)} onChange={(e) => set({ congested: e.target.checked ? [...(value.congested ?? []), c] : (value.congested ?? []).filter((x) => x !== c) })} style={{ width: 16, height: 16, accentColor: "#111" }} /> {c}</label>)}
+          </div>
+        )}
+      <label style={{ display: "block", margin: "12px 0 0" }}><span style={label}>Additional instructions (optional)</span>
+        <textarea aria-label="Additional instructions" rows={2} value={value.instructions ?? ""} onChange={(e) => set({ instructions: e.target.value })} placeholder="Gate number, security, landmark, access instructions" style={{ ...field, resize: "none" }} /></label>
+
       <p style={{ ...label, margin: "14px 0 6px" }}>Contact person at the address</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <input aria-label="Contact name" value={value.contactName} onChange={(e) => set({ contactName: e.target.value })} placeholder="Name" style={field} />
@@ -88,8 +121,15 @@ export function SiteCard({ site, onChange }: { site: ServiceSite; onChange?: () 
       </div>
       <p style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>{site.address}{site.area ? <><br /><b>{site.area}</b></> : null}</p>
       {site.landmark && <p style={{ ...small, marginTop: 2 }}>Landmark: {site.landmark}</p>}
+      {propertyLine(site) && <p style={{ ...small, marginTop: 2 }}>{propertyLine(site)}</p>}
+      {site.instructions && <p style={{ ...small, marginTop: 2 }}>Note: {site.instructions}</p>}
       <p style={{ ...small, marginTop: 4 }}>Contact: {site.contactName} · +91 {site.contactPhone}</p>
       {site.gps && <a href={`https://www.google.com/maps?q=${site.gps}`} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>View on map ↗</a>}
     </div>
   );
+}
+
+/** "Flat / Apartment · ABC Apartments, B-204 · 3rd Floor · Lift: No · Congested (No parking nearby)". */
+export function propertyLine(s: ServiceSite): string {
+  return [s.propertyType, [s.building, s.unit].filter(Boolean).join(", "), s.floor, s.lift ? `Lift: ${s.lift}` : "", s.areaType === "Congested Area" ? `Congested${s.congested?.length ? ` (${s.congested.join(", ")})` : ""}` : ""].filter(Boolean).join(" · ");
 }

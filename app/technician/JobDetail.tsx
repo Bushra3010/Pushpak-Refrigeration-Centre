@@ -14,13 +14,22 @@ import {
   type Db, type Diagnosis, type Job, type LineKind, type PayMethod, type PreWork, type QuoteLine, type Technician, siteOf,
 } from "../lib/data";
 import {
-  addOnWork, completeWork, decideQuote, declineJob, recordPayment, sendQuote, setFollowUp, setStatus, updateJob, visitChargeOnly,
+  addOnWork, completeWork, decideQuote, declineJob, fieldRulesOf, markArrived, recordPayment, sendQuote, setFollowUp, setStatus, updateJob, verifyVisitOtp, visitChargeOnly,
 } from "../lib/store";
+import { InAppCall } from "../components/call";
+import { fmtDistance } from "../lib/field";
+import { propertyLine } from "../customer/SiteForm";
 
 const lid = () => `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 const mapsUrl = (gps: string, address: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(gps || address)}`;
 
-type Sheet = "decline" | "prework" | "add" | "addon" | "approve" | "pay" | "followup" | "invoice" | "pipe" | null;
+type Sheet = "decline" | "prework" | "add" | "addon" | "approve" | "pay" | "followup" | "invoice" | "pipe" | "arrive" | null;
+
+/** Current position, or null if the phone refuses / times out. */
+const here = () => new Promise<{ lat: number; lng: number } | null>((res) => {
+  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return res(null);
+  navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude }), () => res(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+});
 
 export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: Job; tech: Technician; onBack: () => void; flash: (m: string) => void }) {
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -40,6 +49,19 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
   const closedish = job.status === "Closed" || job.status === "Cancelled";
 
   const move = (s: Job["status"], msg: string, note?: string) => { setStatus(job.id, s, by, note); flash(msg); };
+  const rules = fieldRulesOf(db);
+  const [calling, setCalling] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [arriveErr, setArriveErr] = useState("");
+  const [arrivePos, setArrivePos] = useState<{ lat: number; lng: number } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const arrive = async () => {
+    setChecking(true);
+    const pos = await here();
+    setChecking(false);
+    const e = markArrived(job.id, tech.id, pos, "", by);
+    if (e) { setArrivePos(pos); setArriveErr(e); setSheet("arrive"); } else flash("Arrival recorded");
+  };
   const setDiag = (patch: Partial<Diagnosis>) => updateJob(job.id, { diagnosis: { ...job.diagnosis, ...patch } });
   const addLines = (ls: QuoteLine[]) => updateJob(job.id, { lines: [...job.lines, ...ls] });
   const removeLine = (id: string) => updateJob(job.id, { lines: job.lines.filter((l) => l.id !== id) });
@@ -60,13 +82,16 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 700, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>{c.name} <PriorityPill p={job.priority} />{c.amc && <Pill tone="green">AMC {c.amc.plan}</Pill>}</p>
                 <p style={{ ...small, display: "flex", alignItems: "flex-start", gap: 4 }}><PinIcon s={14} c="var(--ink-soft)" /> <span>{site.address}{site.area ? `, ${site.area}` : ""}{site.landmark ? ` · near ${site.landmark}` : ""}</span></p>
+                {propertyLine(site) && <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "var(--ink-soft)" }}>{propertyLine(site)}{site.instructions ? ` · ${site.instructions}` : ""}</p>}
                 {(site.contactPhone !== c.phone || site.address !== c.address) && <p style={{ margin: "2px 0 0", fontSize: 11.5, fontWeight: 700, color: "var(--gold-dark)" }}>Service address for this visit · contact {site.contactName} {site.contactPhone}</p>}
                 <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "var(--ink-mute)" }}>{c.type} · prefers {c.contactPref} · {job.source}</p>
               </div>
             </div>
             {!closedish && (
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <a href={`tel:+91${site.contactPhone || c.phone}`} className="press" style={actionLink("var(--success)", "var(--success-text)")}><PhoneIcon s={16} c="var(--success-text)" /> Call</a>
+                {rules.inAppCall
+                  ? <button type="button" onClick={() => setCalling(true)} className="press" style={{ ...actionLink("var(--success)", "var(--success-text)"), border: "none", cursor: "pointer" }}><PhoneIcon s={16} c="var(--success-text)" /> In-app call</button>
+                  : <a href={`tel:+91${site.contactPhone || c.phone}`} className="press" style={actionLink("var(--success)", "var(--success-text)")}><PhoneIcon s={16} c="var(--success-text)" /> Call</a>}
                 <a href={`https://wa.me/91${c.phone}`} target="_blank" rel="noreferrer" className="press" style={actionLink("#e7f8ee", "#128c4a")}>WhatsApp</a>
                 <a href={mapsUrl(site.gps, `${site.address}, ${site.area}`)} target="_blank" rel="noreferrer" className="press" style={actionLink("var(--blue-tint)", "var(--blue)")}><PinIcon s={16} c="var(--blue)" /> Navigate</a>
               </div>
@@ -101,10 +126,21 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
           {job.status === "Arrived" && (
             <div className="fade-up" style={{ ...card, padding: 14, marginTop: 12, border: "1.5px solid var(--teal)" }}>
               <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Arrived {job.arrivedAt ? `at ${fmtDateTime(job.arrivedAt).split(", ")[1]}` : ""}</p>
-              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 10, cursor: "pointer" }}>
+              {job.arrival && <p style={{ ...small, margin: "4px 0 0" }}>{job.arrival.distanceM != null ? `${fmtDistance(job.arrival.distanceM)} from the customer's pin` : "Customer location not pinned"}{job.arrival.override ? ` · reason: ${job.arrival.override}` : ""}</p>}
+              {rules.visitOtp && !job.otpVerifiedAt ? (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700 }}>Enter the customer&apos;s visit OTP</p>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input aria-label="Visit OTP" inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit code" style={{ ...field, letterSpacing: ".3em", fontWeight: 700, textAlign: "center" }} />
+                    <button type="button" disabled={otp.length !== 4} onClick={() => { const e = verifyVisitOtp(job.id, otp, by); if (e) flash(`⚠ ${e}`); else { setOtp(""); flash("Visit OTP verified"); } }} style={{ border: "none", borderRadius: 10, padding: "0 16px", background: otp.length === 4 ? "#111" : "var(--line-strong)", color: "#fff", fontWeight: 700, cursor: otp.length === 4 ? "pointer" : "not-allowed" }}>Verify</button>
+                  </div>
+                  <p style={{ ...small, fontSize: 11.5 }}>The customer sees this code on their booking page in the app.</p>
+                </div>
+              ) : job.otpVerifiedAt ? <p style={{ margin: "8px 0 0", fontSize: 13, fontWeight: 700, color: "var(--success-text)" }}>✓ Visit OTP verified</p> : null}
+              {(!rules.visitOtp || job.otpVerifiedAt) && <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={job.customerVerified} onChange={(e) => updateJob(job.id, { customerVerified: e.target.checked })} style={{ width: 20, height: 20, marginTop: 1 }} />
                 <span style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>I have verified the customer and the AC (brand, capacity{ac.serial ? `, serial ${ac.serial}` : ""}) and reviewed the previous history.</span>
-              </label>
+              </label>}
             </div>
           )}
 
@@ -197,7 +233,7 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
               </div>
             )}
             {job.status === "Accepted" && <PrimaryButton onClick={() => move("On the Way", "Customer notified you're on the way")}>Start Travel · On the Way</PrimaryButton>}
-            {job.status === "On the Way" && <PrimaryButton onClick={() => move("Arrived", "Arrival time recorded")}>I&apos;ve Arrived</PrimaryButton>}
+            {job.status === "On the Way" && <PrimaryButton disabled={checking} onClick={arrive}>{checking ? "Checking your location…" : "I've Arrived"}</PrimaryButton>}
             {job.status === "Arrived" && <PrimaryButton disabled={!job.customerVerified} onClick={() => move("Diagnosis", "Diagnosis started")}>Start Diagnosis</PrimaryButton>}
             {editingEstimate && (
               <>
@@ -216,6 +252,8 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
 
         {sheet === "decline" && <DeclineSheet onClose={() => setSheet(null)} onConfirm={(r) => { setSheet(null); declineJob(job.id, r); flash("Declined — sent back to coordinator"); onBack(); }} />}
         {sheet === "prework" && <PreWorkSheet initial={job.preWork} onClose={() => setSheet(null)} onSave={(p) => { updateJob(job.id, { preWork: p }); setSheet(null); flash("History saved"); }} />}
+        {sheet === "arrive" && <ArriveSheet error={arriveErr} radius={rules.geofenceM} onClose={() => setSheet(null)} onRetry={async () => { setSheet(null); await arrive(); }} onOverride={(reason) => { const e = markArrived(job.id, tech.id, arrivePos, reason, by); if (e) setArriveErr(e); else { setSheet(null); flash("Arrival recorded with reason — office notified"); } }} />}
+        {calling && <InAppCall jobId={job.id} from={tech.name} to={site.contactName || c.name} onClose={() => setCalling(false)} />}
         {sheet === "pipe" && <PipeCalcSheet db={db} onClose={() => setSheet(null)} onAdd={(ls) => { addLines(ls); setSheet(null); flash("Copper pipe added to estimate"); }} />}
       {sheet === "add" && <AddItemSheet db={db} tech={tech} onClose={() => setSheet(null)} onAdd={(l) => { addLines([l]); flash(`${l.name} added`); }} />}
         {sheet === "addon" && <AddItemSheet db={db} tech={tech} title="Additional work (needs approval)" onClose={() => setSheet(null)} onAdd={(l) => { setSheet(null); addOnWork(job.id, [l], by); flash("Revised quotation sent for approval"); }} />}
@@ -484,6 +522,20 @@ function FollowUpSheet({ onClose, onSave }: { onClose: () => void; onSave: (d: s
       <p style={{ ...small, margin: "8px 4px" }}><ClockIcon s={12} c="var(--ink-soft)" /> {relDay(isoDay(days))}</p>
       <label><span style={label}>Note</span><input value={note} onChange={(e) => setNote(e.target.value)} style={field} /></label>
       <PrimaryButton disabled={!note.trim()} onClick={() => onSave(isoDay(days), note.trim())} style={{ marginTop: 14 }}>Save follow-up</PrimaryButton>
+    </BottomSheet>
+  );
+}
+
+function ArriveSheet({ error, radius, onClose, onRetry, onOverride }: { error: string; radius: number; onClose: () => void; onRetry: () => void; onOverride: (reason: string) => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <BottomSheet title="Can't mark arrived yet" onClose={onClose}>
+      <p style={{ margin: "0 0 10px", padding: 10, borderRadius: 10, background: "var(--gold-tint)", color: "var(--gold-dark)", fontSize: 13, fontWeight: 600 }}>{error}</p>
+      <p style={{ ...small, marginTop: 0 }}>Arrival is allowed within {radius} m of the customer&apos;s pinned location. Move closer and try again, or explain why (wrong pin, GPS weak inside the building…). The office sees the reason.</p>
+      <PrimaryButton onClick={onRetry}>Check location again</PrimaryButton>
+      <label style={{ display: "block", marginTop: 14 }}><span style={label}>Reason to mark arrived anyway</span>
+        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Customer pin is on the main road" style={field} /></label>
+      <div style={{ marginTop: 8 }}><GhostButton onClick={() => reason.trim() && onOverride(reason)}>Mark arrived with reason</GhostButton></div>
     </BottomSheet>
   );
 }

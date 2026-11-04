@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClockIcon, PhoneIcon, ReceiptIcon, StarIcon } from "../components/icons";
 import { ComplaintBox, InvoiceDoc, JobPill, MapMock, ProgressSteps, QuoteTable, SecureBadge, SecureScreen, Timeline } from "../components/service";
 import { Avatar, BottomSheet, Chips, Footer, GhostButton, PageHeader, PrimaryButton, StarPicker, card, sectionTitle, small } from "../components/ui";
 import { acLabel, fmtDateTime, initials, inr, jobTotals, relDay, siteOf, stepOf, validateSite, type Db, type Job, type PayMethod, type ServiceSite } from "../lib/data";
-import { changeJobSite } from "../lib/store";
+import { changeJobSite, ensureVisitOtp, fieldRulesOf } from "../lib/store";
+import { InAppCall } from "../components/call";
 import { SiteCard, SiteForm } from "./SiteForm";
 
 export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, onRate, onCancel, onInvoice }: {
@@ -18,6 +19,10 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
   const site = siteOf(job, cust);
   const canChangeSite = job.status !== "Cancelled" && stepOf(job.status) < stepOf("On the Way");
   const [stars, setStars] = useState(0);
+  const [calling, setCalling] = useState(false);
+  const rules = fieldRulesOf(db);
+  const showOtp = rules.visitOtp && !!job.techId && !job.otpVerifiedAt && stepOf(job.status) >= stepOf("Assigned") && stepOf(job.status) <= stepOf("Arrived");
+  useEffect(() => { if (showOtp && !job.visitOtp) ensureVisitOtp(job.id); }, [showOtp, job.visitOtp, job.id]);
   const ac = db.acs.find((a) => a.id === job.acId)!;
   const tech = db.techs.find((t) => t.id === job.techId);
   const t = jobTotals(job, db.settings);
@@ -29,7 +34,7 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
   return (
     <SecureScreen label="your quotation and invoice">
       <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
-        <PageHeader title={`Service ${job.id}`} sub={`${ac.application} AC · ${acLabel(ac)}`} onBack={onBack} right={<JobPill status={job.status} />} />
+        <PageHeader title={`Service ${job.id}`} sub={(ac.category ?? "AC") === "AC" ? `${ac.application} AC · ${acLabel(ac)}` : `${ac.category} · ${ac.brand}${ac.model ? ` ${ac.model}` : ""}`} onBack={onBack} right={<JobPill status={job.status} />} />
         <div style={{ padding: "0 16px 12px", flex: 1 }}>
           {job.status !== "Cancelled" && <div style={{ ...card, padding: "14px 8px" }}><ProgressSteps status={job.status} /></div>}
           {job.status === "Cancelled" && <div style={{ ...card, padding: 14, background: "var(--surface-dim)", boxShadow: "none" }}><p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Cancelled · {job.cancelReason}</p></div>}
@@ -38,6 +43,16 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
           {job.status === "On the Way" && (
             <div className="fade-up" style={{ marginTop: 12 }}><MapMock moving etaMin={18} /></div>
           )}
+          {showOtp && job.visitOtp && (
+            <div className="fade-up" style={{ marginTop: 12, padding: 14, borderRadius: 14, background: "linear-gradient(160deg,#262626,#0c0c0c)", border: "2px solid var(--gold)", color: "#fff", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: ".1em", color: "var(--gold)" }}>VISIT OTP</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#d6d6d6" }}>Share this code with the technician when they arrive. Work starts only after they enter it.</p>
+              </div>
+              <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: ".18em", fontVariantNumeric: "tabular-nums" }}>{job.visitOtp}</span>
+            </div>
+          )}
+          {job.otpVerifiedAt && step < stepOf("Work Completed") && <p style={{ ...small, margin: "10px 4px 0", color: "var(--success-text)", fontWeight: 600 }}>✓ Visit OTP verified — your technician is checked in.</p>}
           <SiteCard site={site} onChange={canChangeSite ? () => setSheet("address") : undefined} />
 
           {tech ? (
@@ -47,7 +62,9 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
                 <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700 }}>{tech.name}</p>
                 <p style={{ ...small, display: "flex", alignItems: "center", gap: 4 }}><StarIcon s={12} /> {tech.rating} · Your technician</p>
               </div>
-              <a href={`tel:+91${tech.phone}`} aria-label={`Call ${tech.name}`} className="press" style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--success)", display: "flex", alignItems: "center", justifyContent: "center" }}><PhoneIcon s={18} c="var(--success-text)" /></a>
+              {rules.inAppCall
+                ? <button type="button" onClick={() => setCalling(true)} aria-label={`Call ${tech.name} in the app`} className="press" style={{ border: "none", height: 42, borderRadius: 21, padding: "0 14px", background: "var(--success)", color: "var(--success-text)", fontWeight: 700, fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><PhoneIcon s={16} c="var(--success-text)" /> In-app call</button>
+                : <a href={`tel:+91${tech.phone}`} aria-label={`Call ${tech.name}`} className="press" style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--success)", display: "flex", alignItems: "center", justifyContent: "center" }}><PhoneIcon s={18} c="var(--success-text)" /></a>}
             </div>
           ) : job.status === "New Request" && (
             <div style={{ ...card, padding: 14, marginTop: 12, background: "var(--info-bg)", boxShadow: "none" }}>
@@ -125,6 +142,7 @@ export function CustomerJobPage({ db, job, onBack, onApprove, onReject, onPay, o
           </Footer>
         )}
 
+        {calling && tech && <InAppCall jobId={job.id} from={cust?.name ?? "Customer"} to={tech.name} onClose={() => setCalling(false)} />}
         {sheet === "address" && cust && <AddressSheet job={job} site={site} me={cust} onClose={() => setSheet(null)} />}
         {sheet === "approve" && <ApproveSheet total={t.total} onClose={() => setSheet(null)} onConfirm={() => { setSheet(null); onApprove(); }} />}
         {sheet === "reject" && (

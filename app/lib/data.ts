@@ -11,6 +11,7 @@ import type { RepairEntry } from "./repair";
 import type { PartEnquiry, PromoBanner } from "./promo";
 import type { ShiftingInspection } from "./shifting";
 import type { SampleEnquiry } from "./samples";
+import type { CallLog, FieldRules, ServiceCategory } from "./field";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -51,6 +52,8 @@ export const BRANDS = ["Daikin", "LG", "Voltas", "Samsung", "Blue Star", "Hitach
 export interface AcUnit {
   id: string;
   customerId: string;
+  /** appliance category — missing means AC (older records) */
+  category?: ServiceCategory;
   application: (typeof APPLICATIONS)[number];
   acType: (typeof AC_TYPES)[number];
   capacity: (typeof CAPACITIES)[number];
@@ -75,7 +78,8 @@ export const COMPLAINTS = [
 export type ComplaintIssue = (typeof COMPLAINTS)[number];
 
 export interface Complaint {
-  issues: ComplaintIssue[];
+  /** AC issues come from COMPLAINTS; other categories from CATEGORY_COMPLAINTS (field.ts) */
+  issues: string[];
   notes: string; // customer's own words
   errorCode: string;
 }
@@ -170,7 +174,12 @@ export type JobStatus = (typeof JOB_FLOW)[number] | "Cancelled";
 export interface TimelineEntry { status: string; at: string; by: string; note?: string }
 
 /** Where this visit happens — usually the customer's saved address, but a booking can use another. */
-export interface ServiceSite { address: string; area: string; landmark: string; contactName: string; contactPhone: string; gps: string }
+export interface ServiceSite {
+  address: string; area: string; landmark: string; contactName: string; contactPhone: string; gps: string;
+  /** property identification (optional on older bookings) */
+  propertyType?: string; building?: string; unit?: string; floor?: string; lift?: "Yes" | "No" | "Not Sure";
+  areaType?: "Standard Area" | "Congested Area"; congested?: string[]; instructions?: string;
+}
 
 /** The job's service address, falling back to the customer's saved address for older bookings. */
 export const siteOf = (job: Pick<Job, "site">, c: Pick<Customer, "address" | "area" | "gps" | "name" | "phone"> | undefined): ServiceSite =>
@@ -197,6 +206,15 @@ export interface Job {
   slot: string;
   /** service address for this visit (older jobs: none → customer's saved address) */
   site?: ServiceSite;
+  /** appliance category (missing = AC) */
+  category?: ServiceCategory;
+  /** visit OTP the customer shares on arrival; verified before work starts */
+  visitOtp?: string;
+  otpVerifiedAt?: string;
+  /** distance from the site when "Arrived" was marked, and the override reason if outside the radius */
+  arrival?: { distanceM: number | null; override?: string; at: string };
+  /** in-app calls between customer and technician */
+  calls?: CallLog[];
   complaint: Complaint;
   preWork: PreWork;
   customerVerified: boolean;
@@ -230,6 +248,8 @@ export interface Technician {
   skills: string[];
   area: string;
   availability: "Available" | "On Job" | "Off Duty";
+  /** last shared live location (technician app, while on duty) */
+  loc?: { lat: number; lng: number; at: string };
   active: boolean;
   rating: number;
   joined: string;
@@ -342,6 +362,8 @@ export interface Db {
   inspectionRules?: { faultPhotoRequired: boolean };
   /** counter: customer spare-part samples + supplier / customer follow-up (app/lib/samples.ts) */
   samples?: SampleEnquiry[];
+  /** field rules: categories, geofence, nearby radius, visit OTP, in-app call, break limit (field.ts) */
+  fieldRules?: FieldRules;
   /** suppliers the counter has messaged before (name + WhatsApp) */
   suppliers?: { name: string; phone: string }[];
   /** true once the sample records were cleared (fresh start) */

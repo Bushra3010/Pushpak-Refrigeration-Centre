@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { fmtDateTime, inr, type Db, type Settings } from "../lib/data";
+import { FieldRulesPanel } from "./Field";
 import { markRead, resetDemo, startFresh, updateService, updateSettings } from "../lib/store";
 import { Badge, Btn, Filter, Modal, Panel, SearchBox, Table, fieldLabel, input, muted } from "./kit";
 
@@ -127,6 +128,8 @@ export function SettingsSection({ db, who, notify }: { db: Db; who: string; noti
         </div>
         <p style={{ ...muted, padding: "10px 16px" }}>Switch role from the top bar to preview what each role sees. Real enforcement happens server-side (Supabase row-level security) once the backend is connected. Sessions time out after 30 minutes idle.</p>
       </Panel>
+
+      <FieldRulesPanel key={JSON.stringify(db.fieldRules ?? {})} db={db} who={who} notify={notify} />
 
       <Panel title="Data">
         <p style={{ margin: "0 0 10px", fontSize: 13 }}>All three apps share this browser&apos;s data. The app now starts empty so you can add real customers, bookings and repairs. Technicians, prices, parts and settings are kept.</p>

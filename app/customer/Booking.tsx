@@ -6,23 +6,37 @@ import { PreWorkForm, preWorkAnswered } from "../components/service";
 import { Chips, Footer, PageHeader, PrimaryButton, card, field, label, small } from "../components/ui";
 import {
   COMPLAINTS, EMPTY_PREWORK, SLOTS, acLabel, acSummary, fmtDate, isoDay, validateSite,
-  type ComplaintIssue, type Customer, type Db, type PreWork, type ServiceSite,
+  type Customer, type Db, type PreWork, type ServiceSite,
 } from "../lib/data";
 import { SiteForm, siteFromProfile } from "./SiteForm";
-import type { NewJob } from "../lib/store";
+import { addAc, fieldRulesOf, type NewJob } from "../lib/store";
+import { CATEGORY_COMPLAINTS, CATEGORY_ICON, type ServiceCategory } from "../lib/field";
+import { EMPTY_AC } from "../components/service";
 import { NewAcBanner } from "./Sizing";
 
-const STEPS = ["Select AC", "Problem", "History", "Your address", "Date & time"];
+const STEPS = ["Appliance", "Problem", "History", "Your address", "Date & time"];
 const LAST = STEPS.length - 1;
 
 /** Book service: AC → complaint in the customer's words → previous history → date & slot. */
 export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSizing }: {
   db: Db; me: Customer; initialAc?: string; onBack: () => void; onAddAc: () => void; onSubmit: (j: NewJob, saveAsDefault: boolean) => void; onSizing?: () => void;
 }) {
-  const acs = db.acs.filter((a) => a.customerId === me.id);
+  const rules = fieldRulesOf(db);
+  const allMine = db.acs.filter((a) => a.customerId === me.id);
+  const startCat = (allMine.find((a) => a.id === initialAc)?.category ?? rules.categories[0] ?? "AC") as ServiceCategory;
+  const [cat, setCat] = useState<ServiceCategory>(startCat);
+  const acs = allMine.filter((a) => (a.category ?? "AC") === cat);
   const [step, setStep] = useState(initialAc ? 1 : 0);
   const [acId, setAcId] = useState(initialAc ?? acs[0]?.id ?? "");
-  const [issues, setIssues] = useState<ComplaintIssue[]>([]);
+  const [quick, setQuick] = useState({ brand: "", model: "", room: "Kitchen" });
+  const [issues, setIssues] = useState<string[]>([]);
+  const complaintList: readonly string[] = cat === "AC" ? COMPLAINTS : CATEGORY_COMPLAINTS[cat];
+  const pickCat = (c: ServiceCategory) => { setCat(c); const first = allMine.find((a) => (a.category ?? "AC") === c); setAcId(first?.id ?? ""); setIssues([]); };
+  const quickAdd = () => {
+    if (!quick.brand.trim()) return;
+    const id = addAc({ ...EMPTY_AC, customerId: me.id, category: cat, brand: quick.brand.trim(), model: quick.model.trim(), application: (["Bedroom", "Hall", "Office", "Shop"].includes(quick.room) ? quick.room : "Other") as typeof EMPTY_AC.application }, me.name);
+    setAcId(id); setQuick({ brand: "", model: "", room: "Kitchen" });
+  };
   const [notes, setNotes] = useState("");
   const [code, setCode] = useState("");
   const [pre, setPre] = useState<PreWork>({ ...EMPTY_PREWORK });
@@ -33,14 +47,14 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
   const [tried, setTried] = useState(false);
   const siteErr = validateSite(site);
 
-  const toggle = (i: ComplaintIssue) => setIssues((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]));
+  const toggle = (i: string) => setIssues((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]));
   const days = Array.from({ length: 7 }, (_, i) => isoDay(i));
   const canNext = [!!acId, issues.length > 0 && (issues.length > 1 || issues[0] !== "Other" || notes.trim().length > 3), true, true, !!slot][step];
 
   const submit = () => { setTried(true); if (siteErr || !slot) return; onSubmit({
     customerId: me.id, acId, date, slot, source: "Customer App", site,
     complaint: { issues, notes: notes.trim(), errorCode: code.trim() }, preWork: pre,
-    priority: issues.includes("Gas Leakage Suspected") || me.type === "Commercial" ? "High" : "Normal",
+    priority: issues.includes("Gas Leakage Suspected") || issues.includes("Sparking") || me.type === "Commercial" ? "High" : "Normal",
   }, saveDefault); };
 
   return (
@@ -53,7 +67,15 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
       <div style={{ padding: "0 16px", flex: 1 }}>
         {step === 0 && (
           <>
-            <p style={{ ...small, margin: "0 0 12px" }}>Which AC needs attention?</p>
+            <p style={{ ...small, margin: "0 0 8px" }}>What needs service?</p>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(4, rules.categories.length)}, 1fr)`, gap: 8, marginBottom: 14 }}>
+              {rules.categories.map((c) => (
+                <button key={c} type="button" onClick={() => pickCat(c)} aria-pressed={cat === c} className="press" style={{ border: cat === c ? "2px solid var(--gold)" : "1.5px solid var(--line-strong)", background: cat === c ? "linear-gradient(160deg,#262626,#0c0c0c)" : "var(--surface)", color: cat === c ? "#fff" : "var(--ink)", borderRadius: 12, padding: "10px 4px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ fontSize: 22 }} aria-hidden>{CATEGORY_ICON[c]}</span>{c}
+                </button>
+              ))}
+            </div>
+            <p style={{ ...small, margin: "0 0 12px" }}>Which {cat === "AC" ? "AC" : cat.toLowerCase()} needs attention?</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {acs.map((a) => {
                 const on = a.id === acId;
@@ -62,25 +84,36 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
                   <button key={a.id} onClick={() => setAcId(a.id)} className="press" style={{ ...card, padding: 14, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left", border: on ? "2px solid var(--blue)" : "2px solid transparent" }}>
                     <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--blue-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}><AcIcon s={22} c="var(--blue)" /></span>
                     <span style={{ flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>{a.application} AC</span>
-                      <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{acLabel(a)} · {s.lastService ? `Last service ${fmtDate(s.lastService)}` : "No service yet"}</span>
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>{(a.category ?? "AC") === "AC" ? `${a.application} AC` : `${a.brand} ${cat}`}</span>
+                      <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{(a.category ?? "AC") === "AC" ? acLabel(a) : `${a.model || a.application}`} · {s.lastService ? `Last service ${fmtDate(s.lastService)}` : "No service yet"}</span>
                     </span>
                     {on && <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--blue)", display: "flex", alignItems: "center", justifyContent: "center" }}><CheckIcon s={12} c="white" /></span>}
                   </button>
                 );
               })}
-              <button onClick={onAddAc} className="press" style={{ ...card, padding: 14, border: "1.5px dashed var(--line-strong)", background: "transparent", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "var(--blue)", fontWeight: 700, fontSize: 13.5 }}>
-                <PlusIcon s={16} c="var(--blue)" /> Add another AC
-              </button>
+              {cat === "AC" ? (
+                <button onClick={onAddAc} className="press" style={{ ...card, padding: 14, border: "1.5px dashed var(--line-strong)", background: "transparent", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "var(--blue)", fontWeight: 700, fontSize: 13.5 }}>
+                  <PlusIcon s={16} c="var(--blue)" /> Add {acs.length ? "another" : "your"} AC
+                </button>
+              ) : (
+                <div style={{ ...card, padding: 14, border: "1.5px dashed var(--line-strong)", boxShadow: "none" }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 700 }}>＋ Add {acs.length ? "another" : "your"} {cat.toLowerCase()}</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input aria-label="Brand" value={quick.brand} onChange={(e) => setQuick({ ...quick, brand: e.target.value })} placeholder="Brand (LG, IFB…)" style={field} />
+                    <input aria-label="Model" value={quick.model} onChange={(e) => setQuick({ ...quick, model: e.target.value })} placeholder="Model (optional)" style={field} />
+                  </div>
+                  <button type="button" onClick={quickAdd} disabled={!quick.brand.trim()} className="press" style={{ marginTop: 8, width: "100%", border: "none", borderRadius: 10, padding: 11, background: quick.brand.trim() ? "#111" : "var(--line-strong)", color: "#fff", fontWeight: 700, cursor: quick.brand.trim() ? "pointer" : "not-allowed" }}>Add {cat}</button>
+                </div>
+              )}
             </div>
-            {onSizing && <NewAcBanner onOpen={onSizing} />}
+            {onSizing && cat === "AC" && <NewAcBanner onOpen={onSizing} />}
           </>
         )}
 
         {step === 1 && (
           <>
             <span style={label}>What&apos;s the problem? <span style={{ fontWeight: 500, color: "var(--ink-mute)" }}>(select all that apply)</span></span>
-            <Chips options={COMPLAINTS} value={issues} onChange={toggle} multi />
+            <Chips options={complaintList} value={issues} onChange={toggle} multi />
             {issues.includes("Error Code") && (
               <label style={{ display: "block", marginTop: 14 }}><span style={label}>Error code on display</span><input value={code} onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))} placeholder="e.g. E4, U4, CH05" style={field} /></label>
             )}
@@ -130,7 +163,7 @@ export function BookService({ db, me, initialAc, onBack, onAddAc, onSubmit, onSi
             <Chips options={SLOTS} value={slot} onChange={setSlot} />
             <h3 style={{ margin: "20px 2px 8px", fontSize: 14, fontWeight: 700 }}>Summary</h3>
             <div style={{ ...card, padding: 14, fontSize: 13, lineHeight: 1.7 }}>
-              <div><b>AC:</b> {(() => { const a = acs.find((x) => x.id === acId); return a ? `${a.application} · ${acLabel(a)}` : ""; })()}</div>
+              <div><b>{cat}:</b> {(() => { const a = acs.find((x) => x.id === acId); return a ? (cat === "AC" ? `${a.application} · ${acLabel(a)}` : `${a.brand}${a.model ? ` ${a.model}` : ""}`) : ""; })()}</div>
               <div><b>Problem:</b> {issues.join(", ")}</div>
               <div><b>History answers:</b> {preWorkAnswered(pre)} captured</div>
               <div><b>Address:</b> {site.address}{site.area ? `, ${site.area}` : ""}{site.landmark ? ` (near ${site.landmark})` : ""}</div>

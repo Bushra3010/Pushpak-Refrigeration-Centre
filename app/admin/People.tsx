@@ -1,5 +1,6 @@
 "use client";
 
+import { TechLiveBoard } from "./Field";
 import { useMemo, useState } from "react";
 import { AcForm, AcHistory, AcSpecs, EMPTY_AC, JOB_TONE, type AcDraft } from "../components/service";
 import { Chips } from "../components/ui";
@@ -238,6 +239,8 @@ export function TechniciansSection({ db, who, notify }: { db: Db; who: string; n
   const t = edit ? db.techs.find((x) => x.id === edit) : undefined;
   return (
     <>
+      <TechLiveBoard db={db} />
+      <div style={{ height: 16 }} />
       <div className="admin-grid-4" style={{ marginBottom: 16 }}>
         {(["Available", "On Job", "Off Duty"] as const).map((s, i) => (
           <div key={s} style={{ background: "var(--surface)", borderRadius: 16, padding: "14px 16px", border: "1px solid var(--line)", borderTop: `3px solid ${["var(--success-text)", "var(--info-text)", "var(--text-muted)"][i]}` }}>

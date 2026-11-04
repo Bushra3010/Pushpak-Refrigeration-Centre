@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PhoneShell, PillNav, Toast } from "../components/ui";
-import { markRead, requestStock, updateTech, useDb } from "../lib/store";
+import { markRead, requestStock, setTechLocation, updateTech, useDb } from "../lib/store";
 import { JobDetailPage } from "./JobDetail";
 import { Dashboard, NotificationSheet, ProfileScreen, SearchScreen, StockScreen, TechLogin } from "./TechScreens";
 import { CalculatorsHub, parseRoute, routeOf } from "./calc/Hub";
@@ -29,6 +29,18 @@ export default function TechnicianApp() {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => { setTechId(readSession()); }, []);
+  // Share live location while on duty (for "nearby technicians" in Admin dispatch); about once a minute.
+  const onDutyNow = !!techId && db.techs.some((t) => t.id === techId && t.active && t.availability !== "Off Duty");
+  useEffect(() => {
+    if (!onDutyNow || !techId || typeof navigator === "undefined" || !("geolocation" in navigator)) return;
+    let last = 0;
+    const w = navigator.geolocation.watchPosition((p) => {
+      if (Date.now() - last < 60000) return;
+      last = Date.now();
+      setTechLocation(techId, Number(p.coords.latitude.toFixed(5)), Number(p.coords.longitude.toFixed(5)));
+    }, () => {}, { enableHighAccuracy: false, maximumAge: 60000 });
+    return () => navigator.geolocation.clearWatch(w);
+  }, [onDutyNow, techId]);
   // Calculators live at /technician#calculators and /technician#calculators/<id>, so they can be linked and the back button works.
   useEffect(() => {
     const sync = () => {

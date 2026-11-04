@@ -7,10 +7,13 @@ import {
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
   addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus, createJob, changeJobSite, setStatus,
   createInspection, saveInspectionDraft, submitInspection, recordCustomerAck, inspectionDecision,
+  setFieldRules, markArrived, verifyVisitOtp, addAc, assignJob, logCall,
   receiveSample, addSampleSupplier, markSupplierMessageSent, setSupplierResponse, markCustomerInformed, closeSample,
 } from "@/app/lib/store";
 import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
+import { distanceM, parseGps } from "@/app/lib/field";
+import { EMPTY_AC } from "@/app/components/service";
 import { emptySample, supplierMessage, customerMessage, customerUpdateDue } from "@/app/lib/samples";
 import { SPLIT_INDOOR, SPLIT_OUTDOOR, blankInspection, progress, submitProblems } from "@/app/lib/shifting";
 
@@ -221,5 +224,35 @@ describe("counter: spare-part sample enquiries", () => {
     expect(closeSample(r.id, "", "Counter")).toMatch(/why/);
     expect(closeSample(r.id, "Part sold / fitted", "Counter")).toBeNull();
     expect(x().status).toBe("Closed");
+  });
+});
+
+describe("field rules: categories, 100 m arrival radius, visit OTP, in-app calls", () => {
+  it("distance maths and rule validation", () => {
+    const a = parseGps("28.59210,77.04600")!, b = parseGps("28.59300,77.04600")!;
+    expect(distanceM(a, b)).toBeGreaterThan(95); expect(distanceM(a, b)).toBeLessThan(105); // 0.0009° lat ≈ 100 m
+    expect(parseGps("not gps")).toBeNull();
+    expect(setFieldRules({ categories: [] }, "Admin")).toMatch(/at least one/);
+    expect(setFieldRules({ geofenceM: 5 }, "Admin")).toMatch(/radius/);
+    expect(setFieldRules({ geofenceM: 100, visitOtp: true, inAppCall: true }, "Admin")).toBeNull();
+  });
+  it("fridge booking keeps its category; arrival only within the radius; OTP gates the visit", () => {
+    const acId = addAc({ ...EMPTY_AC, customerId: "c1", category: "Fridge", brand: "Samsung", model: "253 L" }, "Rajesh Sharma");
+    const id = createJob({ customerId: "c1", acId, date: "2026-11-05", slot: "9:00 – 11:00 AM", source: "Customer App", complaint: { issues: ["Not Cooling"], notes: "", errorCode: "" },
+      site: { address: "B-42, Sector 7, Dwarka", area: "Dwarka", landmark: "", contactName: "Rajesh", contactPhone: "9876543210", gps: "28.59210,77.04600", propertyType: "Flat / Apartment", floor: "3rd Floor", lift: "No", areaType: "Congested Area", congested: ["No parking nearby"] } }, "Rajesh Sharma");
+    const j = () => db().jobs.find((x) => x.id === id)!;
+    expect(j().category).toBe("Fridge");
+    expect(j().visitOtp).toMatch(/^\d{4}$/);
+    assignJob(id, "t1", "Admin");
+    expect(markArrived(id, "t1", { lat: 28.6, lng: 77.046 }, "", "Rohit Kumar")).toMatch(/move within 100 m/);
+    expect(markArrived(id, "t1", null, "", "Rohit Kumar")).toMatch(/Location not available/);
+    expect(markArrived(id, "t1", { lat: 28.5925, lng: 77.046 }, "", "Rohit Kumar")).toBeNull();
+    expect(j().status).toBe("Arrived");
+    expect(j().arrival!.distanceM!).toBeLessThan(100);
+    expect(verifyVisitOtp(id, "0000" === j().visitOtp ? "1111" : "0000", "Rohit Kumar")).toMatch(/Wrong OTP/);
+    expect(verifyVisitOtp(id, j().visitOtp!, "Rohit Kumar")).toBeNull();
+    expect(j().customerVerified).toBe(true);
+    logCall(id, "Rohit Kumar", "Rajesh", 75);
+    expect(j().calls!.at(-1)).toMatchObject({ from: "Rohit Kumar", seconds: 75, via: "In-app" });
   });
 });

@@ -8,8 +8,10 @@ import {
   type ComplaintIssue, type Db, type Job, type PayMethod, type PreWork, siteOf,
 } from "../lib/data";
 import {
-  addJobNote, assignJob, cancelJob, closeJob, createJob, decideQuote, recordPayment, refundPayment, rescheduleJob, setPriority,
+  addJobNote, fieldRulesOf, assignJob, cancelJob, closeJob, createJob, decideQuote, recordPayment, refundPayment, rescheduleJob, setPriority,
 } from "../lib/store";
+import { JobFieldInfo, LIVE_TONE, liveStatus, techDistance } from "./Field";
+import { CATEGORY_ICON, fmtDistance } from "../lib/field";
 import { Badge, Btn, Filter, Initials, Modal, Panel, SearchBox, Table, fieldLabel, input, muted } from "./kit";
 import { JobFinance } from "./JobFinance";
 
@@ -55,7 +57,7 @@ export function JobsSection({ db, who, openJobId, setOpenJobId, notify }: { db: 
         {view === "List" && (
           <Table rows={rows} rowKey={(j) => j.id} empty="No jobs match." cols={[
             { key: "id", head: "Job", render: (j) => <button onClick={() => setOpenJobId(j.id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}><b style={{ color: "var(--blue)" }}>{j.id}</b><div style={muted}>{j.source}</div></button> },
-            { key: "c", head: "Customer / AC", render: (j) => { const ac = db.acs.find((a) => a.id === j.acId); return <>{custName(db, j.customerId)}<div style={muted}>{ac ? `${ac.application} · ${acLabel(ac)}` : ""}</div></>; } },
+            { key: "c", head: "Customer / appliance", render: (j) => { const ac = db.acs.find((a) => a.id === j.acId); return <>{custName(db, j.customerId)}<div style={muted}>{CATEGORY_ICON[j.category ?? ac?.category ?? "AC"]} {(j.category ?? ac?.category ?? "AC") === "AC" ? (ac ? `${ac.application} · ${acLabel(ac)}` : "") : `${j.category ?? ac?.category} · ${ac?.brand ?? ""}`}</div></>; } },
             { key: "p", head: "Complaint", render: (j) => <span style={{ fontSize: 12.5 }}>{j.complaint.issues.join(", ")}</span> },
             { key: "d", head: "Scheduled", render: (j) => <>{relDay(j.date)}<div style={muted}>{j.slot}</div></> },
             { key: "t", head: "Technician", render: (j) => j.techId ? techName(db, j.techId) : <Badge tone="red">Unassigned</Badge> },
@@ -125,12 +127,16 @@ function AreaView({ db, rows, onOpen }: { db: Db; rows: Job[]; onOpen: (id: stri
 export function rankTechs(db: Db, job: Job) {
   const area = db.customers.find((c) => c.id === job.customerId)?.area ?? "";
   const ac = db.acs.find((a) => a.id === job.acId);
+  const nearKm = fieldRulesOf(db).nearbyKm;
   return db.techs.filter((t) => t.active).map((t) => {
     const load = db.jobs.filter((j) => j.techId === t.id && j.date === job.date && isOpen(j)).length;
     const inArea = t.area.toLowerCase().includes(area.toLowerCase());
     const skill = ac ? t.skills.includes(ac.acType) : false;
-    const score = (inArea ? 3 : 0) + (skill ? 2 : 0) + (t.availability === "Available" ? 2 : t.availability === "On Job" ? 1 : -3) - load + t.rating / 5;
-    return { t, load, inArea, skill, score };
+    const live = liveStatus(db, t.id);
+    const dist = techDistance(db, t.id, job);
+    const nearby = dist != null && dist <= nearKm * 1000;
+    const score = (nearby ? 4 - dist! / (nearKm * 1000) : 0) + (inArea ? 3 : 0) + (skill ? 2 : 0) + (live.status === "Available" ? 2 : live.status === "On Job" ? 1 : live.status === "On Break" ? 0.5 : -3) - load + t.rating / 5;
+    return { t, load, inArea, skill, score, live, dist, nearby };
   }).sort((a, b) => b.score - a.score);
 }
 
@@ -175,6 +181,7 @@ export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job;
           <div>
             <p style={{ ...sec, marginTop: 0 }}>Customer</p>
             <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6 }}><b>{c.name}</b> · +91 {c.phone}{c.altPhone ? ` / ${c.altPhone}` : ""}<br />{(() => { const st = siteOf(job, c); return <>{st.address}{st.area ? `, ${st.area}` : ""}{st.landmark ? ` · near ${st.landmark}` : ""}{st.gps && <> · <a href={`https://maps.google.com/?q=${st.gps}`} target="_blank" rel="noreferrer">Map</a></>}{(st.address !== c.address || st.contactPhone !== c.phone) && <><br /><span style={{ color: "var(--gold-dark)", fontWeight: 600 }}>Service address for this visit · contact {st.contactName} +91 {st.contactPhone}</span></>}</>; })()}<br /><span style={muted}>{c.type} · prefers {c.contactPref}{c.amc ? ` · AMC ${c.amc.plan} till ${fmtDate(c.amc.to)}` : ""}</span></p>
+            <JobFieldInfo db={db} job={job} />
             <p style={sec}>AC</p>
             <p style={{ margin: 0, fontSize: 13.5 }}><b>{ac.application}</b> · {acLabel(ac)} · {ac.ageYears} yrs · {ac.usage}</p>
             <p style={sec}>Complaint</p>
@@ -186,12 +193,12 @@ export function JobDrawer({ db, job, who, onClose, notify }: { db: Db; job: Job;
             <p style={{ ...sec, marginTop: 0 }}>Technician {job.techId ? `· ${techName(db, job.techId)}` : ""}</p>
             {canAssign ? (
               <div style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" }}>
-                {ranked.map(({ t: tech, load, inArea, skill }, i) => (
+                {ranked.map(({ t: tech, load, inArea, skill, live, dist, nearby }, i) => (
                   <div key={tech.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderTop: i ? "1px solid var(--line)" : "none", background: tech.id === job.techId ? "var(--blue-tint)" : "white" }}>
                     <Initials name={tech.name} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>{tech.name} {i === 0 && tech.id !== job.techId && <Badge tone="green">Best match</Badge>}</p>
-                      <p style={{ ...muted, margin: 0 }}>{tech.availability} · {load} job{load === 1 ? "" : "s"} that day · ★{tech.rating}{inArea ? " · covers area" : ""}{skill ? ` · ${ac.acType}` : ""}</p>
+                      <p style={{ ...muted, margin: 0, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Badge tone={LIVE_TONE[live.status]}>{live.status}</Badge>{dist != null ? <span style={{ fontWeight: nearby ? 700 : 400, color: nearby ? "var(--success-text)" : undefined }}>{nearby ? "Nearby · " : ""}{fmtDistance(dist)} away</span> : <span>location unknown</span>} · {load} job{load === 1 ? "" : "s"} that day · ★{tech.rating}{inArea ? " · covers area" : ""}{skill ? ` · ${ac.acType}` : ""}</p>
                     </div>
                     {tech.id === job.techId ? <Badge tone="blue">Assigned</Badge> : <Btn small onClick={() => { assignJob(job.id, tech.id, who); notify(`${job.id} ${job.techId ? "reassigned" : "assigned"} to ${tech.name}`); }}>{job.techId ? "Reassign" : "Assign"}</Btn>}
                   </div>
