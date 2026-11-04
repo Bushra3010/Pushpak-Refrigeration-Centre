@@ -211,7 +211,7 @@ export function cleanDb(db: Db): Db {
     ...db,
     customers: [], acs: [], jobs: [], notifications: [], audit: [], leads: {},
     timeLogs: [], corrections: [], expenses: [], advances: [], incentives: [], deductions: [], attendance: [], payrollRuns: [], calcs: [],
-    acQuotes: [], repairs: [], partEnquiries: [], inspections: [], techPrefs: {},
+    acQuotes: [], repairs: [], partEnquiries: [], inspections: [], samples: [], techPrefs: {},
     techs: (db.techs ?? []).map((t) => ({ ...t, availability: "Available" })),
     clean: true,
   };

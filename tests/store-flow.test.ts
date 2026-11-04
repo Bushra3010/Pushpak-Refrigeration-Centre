@@ -7,9 +7,11 @@ import {
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
   addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus, createJob, changeJobSite, setStatus,
   createInspection, saveInspectionDraft, submitInspection, recordCustomerAck, inspectionDecision,
+  receiveSample, addSampleSupplier, markSupplierMessageSent, setSupplierResponse, markCustomerInformed, closeSample,
 } from "@/app/lib/store";
 import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
+import { emptySample, supplierMessage, customerMessage, customerUpdateDue } from "@/app/lib/samples";
 import { SPLIT_INDOOR, SPLIT_OUTDOOR, blankInspection, progress, submitProblems } from "@/app/lib/shifting";
 
 const db = (): Db => JSON.parse(localStorage.getItem("prc:db:v1")!);
@@ -188,5 +190,36 @@ describe("AC shifting — pre-removal inspection", () => {
     expect(inspectionDecision(id, "Approved", "", "Admin")).toBeNull();
     expect(x().status).toBe("Approved for Removal");
     expect(x().audit.map((a) => a.action)).toContain("Removal authorised");
+  });
+});
+
+describe("counter: spare-part sample enquiries", () => {
+  it("receive → supplier enquiry → response → customer update, with 2-day due dates", () => {
+    const d = { ...emptySample(), customer: { name: "Rajesh Kumar", phone: "9876543210", address: "", customerId: null }, appliance: "WM" as const, brand: "IFB", model: "Senator 6 kg", part: "Water Inlet Valve", storage: "Rack A / Bin 01" };
+    expect(receiveSample({ ...d, part: "" }, "Counter")).toEqual({ error: expect.stringMatching(/part/) });
+    const r = receiveSample(d, "Counter") as { id: string };
+    expect(r.id).toMatch(/^PRC-SMP-\d{4}$/);
+    const x = () => db().samples!.find((s) => s.id === r.id)!;
+    expect(x().status).toBe("Received");
+    expect(x().customerDue > x().receivedAt.slice(0, 10)).toBe(true);
+    expect(addSampleSupplier(r.id, { name: "Regular Supplier", phone: "123" }, "Counter")).toMatch(/10 digits/);
+    expect(addSampleSupplier(r.id, { name: "Regular Supplier", phone: "" }, "Counter")).toBeNull();
+    const sup = x().suppliers[0];
+    expect(supplierMessage("New Enquiry", x(), { company: "Pushpak Refrigeration Centre", phone: "98401 01130", city: "Chennai" })).toMatch(/Part: Water Inlet Valve[\s\S]*Chennai \| 98401 01130/);
+    markSupplierMessageSent(r.id, sup.id, "New Enquiry", "Counter");
+    expect(x().status).toBe("Supplier Enquired");
+    expect(setSupplierResponse(r.id, sup.id, { response: "Restock Expected", price: null, restockDate: "", note: "" }, "Counter")).toMatch(/restock/);
+    expect(setSupplierResponse(r.id, sup.id, { response: "Part Not Available", price: null, restockDate: "", note: "" }, "Counter")).toBeNull();
+    expect(x().status).toBe("Not Available");
+    addSampleSupplier(r.id, { name: "Chennai Spares", phone: "9840000000" }, "Counter");
+    expect(db().suppliers!.map((s) => s.name)).toEqual(expect.arrayContaining(["Regular Supplier", "Chennai Spares"]));
+    setSupplierResponse(r.id, x().suppliers[1].id, { response: "Part Available", price: 650, restockDate: "", note: "Original IFB" }, "Counter");
+    expect(x().status).toBe("Part Found");
+    expect(customerMessage("Part Found", x(), { company: "Pushpak" })).toMatch(/Dear Rajesh Kumar[\s\S]*IFB Water Inlet Valve[\s\S]*Sample ID: PRC-SMP/);
+    markCustomerInformed(r.id, "Part Found", "Counter");
+    expect(customerUpdateDue(x(), x().receivedAt.slice(0, 10))).toBe(false);
+    expect(closeSample(r.id, "", "Counter")).toMatch(/why/);
+    expect(closeSample(r.id, "Part sold / fitted", "Counter")).toBeNull();
+    expect(x().status).toBe("Closed");
   });
 });

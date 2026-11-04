@@ -22,9 +22,10 @@ import { ProfitSection, TechProfitSection } from "./Profit";
 import { RepairsSection } from "./Repairs";
 import { PromoSection } from "./Promo";
 import { ShiftingSection } from "./Shifting";
+import { SamplesSection } from "./Samples";
 
 export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
-  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo" | "shifting";
+  | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo" | "shifting" | "samples";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -33,6 +34,7 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "customers", label: "Customers", icon: "👥", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "acs", label: "AC Assets", icon: "❄️", roles: ["Admin", "Service Coordinator"] },
     { id: "technicians", label: "Technicians", icon: "🧑‍🔧", roles: ["Admin", "Service Coordinator"] },
+    { id: "samples", label: "Sample Enquiries", icon: "🧩", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "repairs", label: "Repair Register", icon: "🔌", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "shifting", label: "Shifting Inspections", icon: "🚚", roles: ["Admin", "Service Coordinator"] },
   ] },
@@ -71,6 +73,7 @@ const TITLES: Record<Section, string> = {
   repairs: "Repair Register — PCB Board · Stabilizer · Indoor Coil",
   promo: "Spare Parts Promo — Explore More at Pushpak",
   shifting: "AC Shifting — Pre-Removal Inspections",
+  samples: "Sample Enquiries — customer spare-part samples",
 };
 
 const SESSION_KEY = "prc:admin";
@@ -125,6 +128,7 @@ export default function AdminApp() {
     expenses: db.expenses.filter((e) => e.status === "Pending").length,
     repairs: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length,
     promo: (db.partEnquiries ?? []).filter((e) => e.status === "New").length,
+    samples: (db.samples ?? []).filter((x) => x.status !== "Closed" && x.customerDue <= today()).length,
     shifting: (db.inspections ?? []).filter((i) => ["Submitted", "Awaiting Customer Approval", "On Hold – Unsafe"].includes(i.status)).length,
   };
 
@@ -216,6 +220,7 @@ export default function AdminApp() {
             {current === "expenses" && <ExpensesSection db={db} who={who} notify={notify} />}
             {current === "timesheets" && <TimeSheetsSection db={db} who={who} notify={notify} />}
             {current === "calculators" && <CalculatorsSection db={db} who={who} notify={notify} />}
+            {current === "samples" && <SamplesSection db={db} who={who} notify={notify} />}
             {current === "shifting" && <ShiftingSection db={db} who={who} notify={notify} />}
             {current === "promo" && <PromoSection db={db} who={who} notify={notify} />}
             {current === "repairs" && <RepairsSection db={db} who={who} notify={notify} />}

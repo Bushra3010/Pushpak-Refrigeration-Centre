@@ -18,6 +18,7 @@ import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
@@ -1110,4 +1111,134 @@ export function inspectionDecision(id: string, decision: "Approved" | "Hold" | "
 
 export function setInspectionRules(rules: { faultPhotoRequired: boolean }, by: string) {
   mutate((d) => { d.inspectionRules = rules; audit(d, by, "Inspection rules", `Fault photo required: ${rules.faultPhotoRequired ? "yes" : "no"}`); });
+}
+
+/* ───────────────────────── Counter: spare-part sample enquiries ───────────────────────── */
+
+const smpLog = (x: SampleEnquiry, by: string, text: string) => x.timeline.push({ at: nowIso(), by, text });
+const findSample = (d: Db, id: string) => d.samples?.find((x) => x.id === id);
+
+export function receiveSample(draft: SampleDraft, by: string): { id: string } | { error: string } {
+  const err = validateSample(draft);
+  if (err) return { error: err };
+  let id = "";
+  mutate((d) => {
+    d.samples ??= [];
+    const n = d.samples.reduce((m, x) => Math.max(m, Number(x.id.split("-").pop()) || 0), 0) + 1;
+    id = `PRC-SMP-${String(n).padStart(4, "0")}`;
+    const now = nowIso(), day = now.slice(0, 10);
+    const phone = draft.customer.phone.replace(/\D/g, "").slice(-10);
+    const cust = d.customers.find((c) => c.phone === phone && !c.mergedInto);
+    d.samples.unshift({
+      ...structuredClone(draft), id, receivedAt: now, receivedBy: by,
+      customer: { ...draft.customer, phone, customerId: cust?.id ?? null },
+      supplierDue: addDays(day, 2), customerDue: addDays(day, 2), suppliers: [], customerUpdates: [], customerReply: "Pending",
+      status: "Received", closeReason: "", timeline: [{ at: now, by, text: `Sample received${draft.storage ? ` — kept at ${draft.storage}` : ""}` }],
+    });
+    audit(d, by, "Sample received", `${id} · ${draft.brand} ${draft.part} · ${draft.customer.name}`);
+  });
+  return { id };
+}
+
+export function updateSample(id: string, patch: Partial<SampleDraft>, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) { err = "Sample not found."; return; }
+    err = validateSample({ ...x, ...patch });
+    if (err) return;
+    Object.assign(x, structuredClone(patch));
+    smpLog(x, by, "Details edited");
+  });
+  return err;
+}
+
+/** Add a supplier to ask (also remembered in the supplier list), or mark the message to them as sent. */
+export function addSampleSupplier(id: string, sup: { name: string; phone: string }, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) { err = "Sample not found."; return; }
+    if (!sup.name.trim()) { err = "Enter the supplier name."; return; }
+    const phone = sup.phone.replace(/\D/g, "").slice(-10);
+    if (phone && !/^[6-9]\d{9}$/.test(phone)) { err = "Supplier WhatsApp must be 10 digits."; return; }
+    x.suppliers.push({ id: uid(), name: sup.name.trim(), phone, messageSentAt: null, response: "Pending / No Response", respondedAt: null, price: null, restockDate: "", note: "" });
+    d.suppliers ??= [];
+    const known = d.suppliers.find((s) => s.name.toLowerCase() === sup.name.trim().toLowerCase());
+    if (known) { if (phone) known.phone = phone; } else d.suppliers.push({ name: sup.name.trim(), phone });
+    smpLog(x, by, `Supplier added: ${sup.name.trim()}`);
+  });
+  return err;
+}
+
+export function markSupplierMessageSent(id: string, supplierId: string, template: string, by: string) {
+  mutate((d) => {
+    const x = findSample(d, id); const s = x?.suppliers.find((y) => y.id === supplierId);
+    if (!x || !s) return;
+    s.messageSentAt = nowIso();
+    if (x.status === "Received") x.status = "Supplier Enquired";
+    x.supplierDue = addDays(nowIso().slice(0, 10), 2);
+    smpLog(x, by, `${template} sent to ${s.name}`);
+  });
+}
+
+export function setSupplierResponse(id: string, supplierId: string, r: { response: SupplierResponse; price: number | null; restockDate: string; note: string }, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = findSample(d, id); const s = x?.suppliers.find((y) => y.id === supplierId);
+    if (!x || !s) { err = "Supplier not found."; return; }
+    if (r.response === "Restock Expected" && !r.restockDate) { err = "Enter the expected restock date."; return; }
+    Object.assign(s, { ...r, respondedAt: r.response === "Pending / No Response" ? null : nowIso() });
+    if (r.response === "Part Available") x.status = "Part Found";
+    else if (r.response === "Restock Expected" && x.status !== "Part Found") x.status = "Restock Expected";
+    else if (r.response === "Part Not Available" && x.status !== "Part Found" && !x.suppliers.some((y) => y.response === "Part Available" || y.response === "Pending / No Response")) x.status = "Not Available";
+    smpLog(x, by, `${s.name}: ${r.response}${r.price != null ? ` · ₹${r.price}` : ""}${r.restockDate ? ` · restock ${r.restockDate}` : ""}${r.note ? ` — ${r.note}` : ""}`);
+  });
+  return err;
+}
+
+/** Customer was messaged — resets the 2-day customer update clock. */
+export function markCustomerInformed(id: string, template: CustomerTemplate, by: string) {
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) return;
+    x.customerUpdates.push({ at: nowIso(), template, by });
+    x.customerDue = addDays(nowIso().slice(0, 10), 2);
+    smpLog(x, by, `Customer informed: ${template}`);
+    if (x.customer.customerId) d.notifications.unshift({ id: uid(), at: nowIso(), to: `customer:${x.customer.customerId}`, title: `Spare part update · ${x.part}`, body: `${template} — ${x.id}`, read: false });
+  });
+}
+
+export function setCustomerReply(id: string, reply: "Pending" | "Approved" | "Declined", by: string) {
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) return;
+    x.customerReply = reply;
+    if (reply === "Approved") x.status = "Customer Approved";
+    smpLog(x, by, `Customer reply: ${reply}`);
+  });
+}
+
+export function closeSample(id: string, reason: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) { err = "Sample not found."; return; }
+    if (!reason.trim()) { err = "Choose why it is closed."; return; }
+    x.status = "Closed"; x.closeReason = reason;
+    smpLog(x, by, `Closed — ${reason}`);
+    audit(d, by, "Sample closed", `${id} · ${reason}`);
+  });
+  return err;
+}
+
+export function reopenSample(id: string, by: string) {
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) return;
+    const r = latestSupplier(x)?.response;
+    x.status = r === "Part Available" ? "Part Found" : x.suppliers.length ? "Supplier Enquired" : "Received";
+    x.closeReason = "";
+    smpLog(x, by, "Reopened");
+  });
 }

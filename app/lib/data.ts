@@ -10,6 +10,7 @@
 import type { RepairEntry } from "./repair";
 import type { PartEnquiry, PromoBanner } from "./promo";
 import type { ShiftingInspection } from "./shifting";
+import type { SampleEnquiry } from "./samples";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -339,6 +340,10 @@ export interface Db {
   /** AC shifting — pre-removal inspections (app/lib/shifting.ts) */
   inspections?: ShiftingInspection[];
   inspectionRules?: { faultPhotoRequired: boolean };
+  /** counter: customer spare-part samples + supplier / customer follow-up (app/lib/samples.ts) */
+  samples?: SampleEnquiry[];
+  /** suppliers the counter has messaged before (name + WhatsApp) */
+  suppliers?: { name: string; phone: string }[];
   /** true once the sample records were cleared (fresh start) */
   clean?: boolean;
   /** saved-data schema version (see upgradeDb) */
