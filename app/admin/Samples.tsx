@@ -9,7 +9,7 @@ import {
   type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SampleStatus, type SupplierContact, type SupplierResponse, type SupplierTemplate,
 } from "../lib/samples";
 import {
-  addSampleSupplier, closeSample, markCustomerInformed, markSupplierMessageSent, receiveSample, reopenSample, setCustomerReply, setSupplierResponse, updateSample,
+  addSampleSupplier, closeSample, markCustomerInformed, sampleNextAction, markSupplierMessageSent, receiveSample, reopenSample, setCustomerReply, setSupplierResponse, updateSample,
 } from "../lib/store";
 import { Badge, Btn, Filter, Modal, Panel, SearchBox, Stat, Table, fieldLabel, input, muted } from "./kit";
 
@@ -32,7 +32,7 @@ export function SamplesSection({ db, who, notify }: { db: Db; who: string; notif
   const t = isoDay(0);
   const [f, setF] = useState<F>("Open");
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState<{ id: string | null; tab: 0 | 1 | 2 } | null>(null);
+  const [open, setOpen] = useState<{ id: string | null; tab: 0 | 1 | 2; tpl?: CustomerTemplate } | null>(null);
   const match = (s: SampleEnquiry, x: F) => x === "All" ? true : x === "Open" ? isOpenSample(s) : x === "Supplier due" ? supplierFollowUpDue(s, t) : x === "Customer update due" ? customerUpdateDue(s, t) : s.status === x;
   const FILTERS: F[] = ["Open", "Supplier due", "Customer update due", "All", ...SAMPLE_STATUSES];
   const counts = Object.fromEntries(FILTERS.map((x) => [x, all.filter((s) => match(s, x)).length])) as Partial<Record<F, number>>;
@@ -68,8 +68,8 @@ export function SamplesSection({ db, who, notify }: { db: Db; who: string; notif
         <Modal title={sample ? `${sample.id} · ${sample.brand} ${sample.part}` : "Receive New Sample"} onClose={() => setOpen(null)} width={680}>
           <Steps tab={open.tab} enabled={!!sample} onTab={(n) => setOpen({ ...open, tab: n })} />
           {open.tab === 0 && <ReceiveTab db={db} s={sample} onSaved={(id) => { setOpen({ id, tab: 1 }); notify(sample ? "Sample updated" : `Sample ${id} received`); }} who={who} />}
-          {open.tab === 1 && sample && <SupplierTab db={db} s={sample} who={who} notify={notify} onNext={() => setOpen({ ...open, tab: 2 })} />}
-          {open.tab === 2 && sample && <CustomerTab db={db} s={sample} who={who} notify={notify} onBack={() => setOpen({ ...open, tab: 1 })} />}
+          {open.tab === 1 && sample && <SupplierTab db={db} s={sample} who={who} notify={notify} onNext={() => setOpen({ ...open, tab: 2, tpl: undefined })} onCustomer={(tpl) => setOpen({ ...open, tab: 2, tpl })} />}
+          {open.tab === 2 && sample && <CustomerTab key={open.tpl ?? "auto"} db={db} s={sample} who={who} notify={notify} initialTpl={open.tpl} onBack={() => setOpen({ ...open, tab: 1 })} />}
         </Modal>
       )}
     </div>
@@ -238,7 +238,7 @@ function CustomerPicker({ db, value, onChange, onPhone, known }: { db: Db; value
 }
 
 /* ── 2 Supplier ── */
-function SupplierTab({ db, s, who, notify, onNext }: { db: Db; s: SampleEnquiry; who: string; notify: (m: string) => void; onNext: () => void }) {
+function SupplierTab({ db, s, who, notify, onNext, onCustomer }: { db: Db; s: SampleEnquiry; who: string; notify: (m: string) => void; onNext: () => void; onCustomer: (t: CustomerTemplate) => void }) {
   const known = db.suppliers ?? [];
   const [name, setName] = useState(known[0]?.name ?? "Regular Supplier");
   const [phone, setPhone] = useState(known[0]?.phone ?? "");
@@ -247,7 +247,6 @@ function SupplierTab({ db, s, who, notify, onNext }: { db: Db; s: SampleEnquiry;
   const shop = shopOf(db);
   const add = () => { const e = addSampleSupplier(s.id, { name, phone }, who); if (e) setErr(e); else { setErr(null); notify(`${name} added`); } };
   const last = latestSupplier(s);
-  const allNo = s.suppliers.length > 0 && s.suppliers.every((x) => x.response === "Part Not Available");
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -255,10 +254,10 @@ function SupplierTab({ db, s, who, notify, onNext }: { db: Db; s: SampleEnquiry;
       </div>
       {supplierFollowUpDue(s, isoDay(0)) && <Info icon="⏰" title="Supplier follow-up due" tone="warn">No supplier has replied in 2 days — send a follow-up or ask another supplier.</Info>}
 
-      {s.suppliers.map((x) => <SupplierCard key={x.id} s={s} x={x} tpl={tpl} shop={shop} who={who} notify={notify} />)}
+      {s.suppliers.map((x) => <SupplierCard key={x.id} db={db} s={s} x={x} tpl={tpl} shop={shop} who={who} notify={notify} onCustomer={onCustomer} onFollowUp={() => { setTpl("Follow-up Reminder"); notify("Follow-up message ready — copy and send it"); }} />)}
 
       <div style={{ border: "1px solid var(--line-strong)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
-        <b style={{ fontSize: 14 }}>{s.suppliers.length ? (allNo ? "🔓 Next action — ask another supplier" : "Ask another supplier") : "Supplier"}</b>
+        <b style={{ fontSize: 14 }}>{s.suppliers.length ? "＋ Ask another supplier" : "Supplier to ask"}</b>
         <div className="form-grid" style={{ marginTop: 10 }}>
           <L t="Supplier name"><input list="sample-suppliers" value={name} onChange={(e) => { setName(e.target.value); const k = known.find((y) => y.name === e.target.value); if (k) setPhone(k.phone); }} style={input} />
             <datalist id="sample-suppliers">{known.map((k) => <option key={k.name} value={k.name} />)}</datalist></L>
@@ -276,7 +275,7 @@ function SupplierTab({ db, s, who, notify, onNext }: { db: Db; s: SampleEnquiry;
   );
 }
 
-function SupplierCard({ s, x, tpl, shop, who, notify }: { s: SampleEnquiry; x: SupplierContact; tpl: SupplierTemplate; shop: { company: string; phone: string; city: string }; who: string; notify: (m: string) => void }) {
+function SupplierCard({ db, s, x, tpl, shop, who, notify, onCustomer, onFollowUp }: { db: Db; s: SampleEnquiry; x: SupplierContact; tpl: SupplierTemplate; shop: { company: string; phone: string; city: string }; who: string; notify: (m: string) => void; onCustomer: (t: CustomerTemplate) => void; onFollowUp: () => void }) {
   const [resp, setResp] = useState<SupplierResponse>(x.response);
   const [price, setPrice] = useState(x.price == null ? "" : String(x.price));
   const [restock, setRestock] = useState(x.restockDate);
@@ -307,14 +306,74 @@ function SupplierCard({ s, x, tpl, shop, who, notify }: { s: SampleEnquiry; x: S
       )}
       <L t="Note"><input value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => save(resp)} placeholder="Warranty, delivery time, condition…" style={input} /></L>
       {err && <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
+      {(resp !== "Pending / No Response" || supplierFollowUpDue(s, isoDay(0))) && <NextAction db={db} s={s} resp={resp} who={who} notify={notify} onCustomer={onCustomer} onFollowUp={onFollowUp} />}
+    </div>
+  );
+}
+
+type NextKey = "other" | "alt" | "restock" | "followup" | "inform" | "approval" | "return";
+const NEXT_FOR: Record<SupplierResponse, { k: NextKey; label: string }[]> = {
+  "Part Not Available": [
+    { k: "other", label: "Ask other suppliers" }, { k: "alt", label: "Look for a compatible / alternative part" }, { k: "restock", label: "Check again later (restock)" },
+    { k: "inform", label: "Inform customer — part not available" }, { k: "return", label: "Return sample to customer" },
+  ],
+  "Pending / No Response": [{ k: "followup", label: "Send follow-up reminder" }, { k: "other", label: "Ask other suppliers" }, { k: "inform", label: "Inform customer — supplier delay" }],
+  "Restock Expected": [{ k: "inform", label: "Inform customer — expected restock date" }, { k: "other", label: "Ask other suppliers (faster?)" }, { k: "restock", label: "Remind me on the restock date" }],
+  "Part Available": [{ k: "inform", label: "Inform customer — part found" }, { k: "approval", label: "Customer approved — order / fit the part" }, { k: "other", label: "Compare price with other suppliers" }],
+};
+
+/** "Next Action Unlocked" — what to do after the supplier answers. */
+function NextAction({ db, s, resp, who, notify, onCustomer, onFollowUp }: { db: Db; s: SampleEnquiry; resp: SupplierResponse; who: string; notify: (m: string) => void; onCustomer: (t: CustomerTemplate) => void; onFollowUp: () => void }) {
+  const opts = NEXT_FOR[resp];
+  const [k, setK] = useState<NextKey>(opts[0].k);
+  const [text, setText] = useState("");
+  const [date, setDate] = useState("");
+  const asked = new Set(s.suppliers.map((x) => x.name.toLowerCase()));
+  const others = (db.suppliers ?? []).filter((x) => !asked.has(x.name.toLowerCase()));
+  const [nm, setNm] = useState(""); const [ph, setPh] = useState("");
+  const tplFor: CustomerTemplate = resp === "Part Available" ? "Part Found" : resp === "Part Not Available" ? "Not Available" : "Supplier Delay";
+  return (
+    <div style={{ marginTop: 12, border: "1.5px solid #15803d", borderRadius: 12, padding: 12, background: "#f3fbf5" }}>
+      <b style={{ fontSize: 14 }}>🔓 Next Action Unlocked</b>
+      <select value={k} onChange={(e) => setK(e.target.value as NextKey)} style={{ ...input, marginTop: 8 }}>{opts.map((o) => <option key={o.k} value={o.k}>{o.label}</option>)}</select>
+      <div style={{ marginTop: 10 }}>
+        {k === "other" && <>
+          {others.length > 0 ? <>
+            <span style={fieldLabel}>Suppliers not asked yet</span>
+            <div style={{ display: "grid", gap: 6, margin: "4px 0 10px" }}>
+              {others.map((o) => <div key={o.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 10px", fontSize: 13 }}>
+                <span><b>{o.name}</b>{o.phone ? <span style={muted}> · {o.phone}</span> : null}</span>
+                <Btn small onClick={() => { const e = addSampleSupplier(s.id, o, who); notify(e ? `⚠ ${e}` : `${o.name} added — copy & send the message`); }}>Ask</Btn>
+              </div>)}
+            </div>
+          </> : <p style={{ ...muted, margin: "0 0 8px" }}>No other saved suppliers yet — add a new one:</p>}
+          <div className="form-grid">
+            <L t="New supplier name"><input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="e.g. Ritchie Street dealer" style={input} /></L>
+            <L t="WhatsApp number"><input inputMode="tel" value={ph} onChange={(e) => setPh(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Optional" style={input} /></L>
+          </div>
+          <Btn small onClick={() => { const e = addSampleSupplier(s.id, { name: nm, phone: ph }, who); if (e) notify(`⚠ ${e}`); else { notify(`${nm} added`); setNm(""); setPh(""); } }}>＋ Add & ask</Btn>
+        </>}
+        {k === "alt" && <>
+          <L t="Alternative / compatible part details"><input value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Universal inlet valve 12V, 180° outlet" style={input} /></L>
+          <Btn small onClick={() => { if (!text.trim()) return; sampleNextAction(s.id, `Looking for alternative: ${text.trim()}`, who); setText(""); notify("Noted in history"); }}>Save note</Btn>
+        </>}
+        {k === "restock" && <>
+          <L t="Check again on"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={input} /></L>
+          <Btn small onClick={() => { if (!date) return; sampleNextAction(s.id, `Check restock again on ${date}`, who, date); notify(`Reminder set for ${fmtDate(date)}`); }}>Set reminder</Btn>
+        </>}
+        {k === "followup" && <Btn small onClick={onFollowUp}>Use “Follow-up Reminder” message ↑</Btn>}
+        {k === "inform" && <Btn small onClick={() => { sampleNextAction(s.id, `Next: inform customer (${tplFor})`, who); onCustomer(tplFor); }}>Open customer message → {tplFor}</Btn>}
+        {k === "approval" && <Btn small onClick={() => { setCustomerReply(s.id, "Approved", who); sampleNextAction(s.id, "Customer approved — order / fit the part", who); notify("Marked customer approved"); }}>✓ Mark customer approved</Btn>}
+        {k === "return" && <Btn small kind="danger" onClick={() => { closeSample(s.id, "Sample returned to customer", who); notify(`${s.id} closed — sample returned`); }}>Return sample & close</Btn>}
+      </div>
     </div>
   );
 }
 
 /* ── 3 Customer ── */
-function CustomerTab({ db, s, who, notify, onBack }: { db: Db; s: SampleEnquiry; who: string; notify: (m: string) => void; onBack: () => void }) {
+function CustomerTab({ db, s, who, notify, onBack, initialTpl }: { db: Db; s: SampleEnquiry; who: string; notify: (m: string) => void; onBack: () => void; initialTpl?: CustomerTemplate }) {
   const today = isoDay(0);
-  const [tpl, setTpl] = useState<CustomerTemplate>(suggestedCustomerTemplate(s, today));
+  const [tpl, setTpl] = useState<CustomerTemplate>(initialTpl ?? suggestedCustomerTemplate(s, today));
   const [reason, setReason] = useState<string>(CLOSE_REASONS[0]);
   const msg = customerMessage(tpl, s, { company: db.settings.company });
   const due = customerUpdateDue(s, today);

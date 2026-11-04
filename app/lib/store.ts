@@ -1232,6 +1232,17 @@ export function setCustomerReply(id: string, reply: "Pending" | "Approved" | "De
   });
 }
 
+/** Next action chosen after a supplier answer — logged; a check-again date moves the supplier follow-up date. */
+export function sampleNextAction(id: string, text: string, by: string, checkOn?: string) {
+  mutate((d) => {
+    const x = findSample(d, id);
+    if (!x) return;
+    x.nextAction = text;
+    if (checkOn) x.supplierDue = checkOn;
+    smpLog(x, by, text);
+  });
+}
+
 export function closeSample(id: string, reason: string, by: string): Err {
   let err: string | null = null;
   mutate((d) => {

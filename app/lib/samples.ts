@@ -76,6 +76,8 @@ export interface SampleEnquiry {
   customerReply: "Pending" | "Approved" | "Declined";
   status: SampleStatus;
   closeReason: string;
+  /** last next action chosen after a supplier answer */
+  nextAction?: string;
   timeline: { at: string; by: string; text: string }[];
 }
 
