@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { MyFinance } from "./Timer";
+import { TechRegistration } from "../components/TechRegistration";
+import { BirthdayCard } from "../components/Birthday";
+import { PaymentShareSheet } from "../components/PaymentShare";
+import { completion } from "../lib/techprofile";
+import { profileOf } from "../lib/store";
 import { PipeCalcSheet } from "./PipeSheet";
 import { BrandMark, Wordmark } from "../components/Brand";
 import { AlertIcon, ChevronRight, ClockIcon, LogoutIcon, MinusIcon, PinIcon, PlusIcon, SearchIcon, StarIcon } from "../components/icons";
@@ -312,6 +317,16 @@ function RequestSheet({ db, onClose, onSend }: { db: Db; onClose: () => void; on
 /* ───────────────────────── Profile ───────────────────────── */
 
 export function ProfileScreen({ db, tech, onLogout, flash }: { db: Db; tech: Technician; onLogout: () => void; flash: (m: string) => void }) {
+  const [reg, setReg] = useState(false);
+  const [pay, setPay] = useState(false);
+  const prof = profileOf(db, tech.id);
+  const comp = completion(prof);
+  if (reg) return (
+    <div style={{ paddingBottom: 24 }}>
+      <PageHeader title="My Registration" sub="Personal · Family · Documents · Bank · Uniform" onBack={() => setReg(false)} />
+      <div style={{ padding: "0 16px" }}><TechRegistration db={db} techId={tech.id} asAdmin={false} who={tech.name} flash={flash} /></div>
+    </div>
+  );
   const mine = db.jobs.filter((j) => j.techId === tech.id);
   const done = mine.filter(isDone);
   const assigned = mine.filter((j) => j.status !== "New Request").length;
@@ -335,6 +350,26 @@ export function ProfileScreen({ db, tech, onLogout, flash }: { db: Db; tech: Tec
             <div key={k} style={{ ...card, padding: 12 }}><p style={{ margin: 0, fontSize: 11, color: "var(--ink-mute)", fontWeight: 600 }}>{k}</p><p style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{v}</p></div>
           ))}
         </div>
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          <button type="button" onClick={() => setReg(true)} className="press" style={{ ...card, border: "2px solid var(--gold)", padding: 14, textAlign: "left", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", background: "linear-gradient(160deg,#262626,#0c0c0c)", color: "#fff" }}>
+            <span style={{ fontSize: 24 }}>🪪</span>
+            <span style={{ flex: 1 }}><b style={{ display: "block", fontSize: 14.5 }}>My Registration & Documents</b><span style={{ fontSize: 12, color: "#cfcfcf" }}>{prof.empId} · {comp.pct}% complete · {comp.verified}/6 verified{prof.role ? ` · ${prof.role.title}` : ""}</span></span>
+            <span style={{ color: "var(--gold)" }}>›</span>
+          </button>
+          <button type="button" onClick={() => setPay(true)} className="press" style={{ ...card, border: "1.5px solid var(--line-strong)", padding: 14, textAlign: "left", cursor: "pointer", display: "flex", gap: 12, alignItems: "center" }}>
+            <span style={{ fontSize: 24 }}>📲</span>
+            <span style={{ flex: 1 }}><b style={{ display: "block", fontSize: 14.5 }}>Share payment QR & bank details</b><span style={{ fontSize: 12, color: "var(--ink-soft)" }}>Send the shop&apos;s UPI QR / bank account to a customer on WhatsApp</span></span>
+            <span>›</span>
+          </button>
+        </div>
+        {prof.role && (
+          <div style={{ ...card, padding: 14, marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: "var(--gold-dark)" }}>MY JOB ROLE</p>
+            <p style={{ margin: "2px 0 6px", fontSize: 15, fontWeight: 800 }}>{prof.role.title}</p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>{prof.role.responsibilities.map((r) => <li key={r}>{r}</li>)}</ul>
+          </div>
+        )}
+        {pay && <PaymentShareSheet db={db} onClose={() => setPay(false)} flash={flash} />}
         <MyFinance db={db} tech={tech} flash={flash} />
         <h3 style={sectionTitle}>Skills</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{tech.skills.map((s) => <Pill key={s} tone="blue">{s}</Pill>)}</div>
@@ -353,7 +388,9 @@ export function NotificationSheet({ items, onClose, onOpen }: { items: AppNotifi
   return (
     <BottomSheet title="Notifications" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map((n) => (
+        {items.map((n) => n.title.startsWith("Happy Birthday") ? (
+          <div key={n.id}><BirthdayCard name={n.title.replace(/^Happy Birthday, /, "").replace(/! 🎂$/, "")} company={n.body.match(/whole (.+) family/)?.[1] ?? "Pushpak Refrigeration Centre"} confetti={!n.read} /></div>
+        ) : (
           <button key={n.id} onClick={() => onOpen(n)} style={{ ...card, padding: 12, border: "none", textAlign: "left", cursor: "pointer", background: n.read ? "var(--surface)" : "var(--blue-tint)" }}>
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700 }}>{n.title}</p>
             <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-secondary)" }}>{n.body}</p>

@@ -18,6 +18,7 @@ import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
 import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { DOC_LABEL, aadhaarLast4, daysToBirthday, emptyProfile, profileProblems, type DocKey, type DocStatus, type PaymentInfo, type TechProfile } from "./techprofile";
 import { DEFAULT_FIELD_RULES, distanceM, newVisitOtp, parseGps, type FieldRules } from "./field";
 import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
@@ -1340,4 +1341,87 @@ export function logCall(jobId: string | null, from: string, to: string, seconds:
     const entry = { id: uid(), at: nowIso(), jobId, from, to, seconds: Math.max(0, Math.round(seconds)), via: "In-app" as const };
     if (j) (j.calls ??= []).push(entry);
   });
+}
+
+/* ───────────────────────── Technician registration, role, birthdays, payment details ───────────────────────── */
+
+export const empIdOf = (d: Pick<Db, "techs">, techId: string) => `PRC-T${String(Math.max(1, d.techs.findIndex((t) => t.id === techId) + 1)).padStart(3, "0")}`;
+export const profileOf = (d: Pick<Db, "techs">, techId: string): TechProfile => d.techs.find((t) => t.id === techId)?.profile ?? emptyProfile(empIdOf(d, techId));
+
+/** Technician (or admin) saves registration details. Uploading a document sets it to Pending; only admin verifies. */
+export function saveTechProfile(techId: string, next: TechProfile, by: string, asAdmin = false): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const t = d.techs.find((x) => x.id === techId);
+    if (!t) { err = "Technician not found."; return; }
+    const p: TechProfile = structuredClone(next);
+    p.docs.aadhaar.number = aadhaarLast4(p.docs.aadhaar.number);
+    p.docs.pan.number = p.docs.pan.number.toUpperCase().trim();
+    p.bank.ifsc = p.bank.ifsc.toUpperCase().trim();
+    const probs = profileProblems(p);
+    if (probs.length) { err = probs[0]; return; }
+    const prev = t.profile ?? emptyProfile(empIdOf(d, techId));
+    for (const k of Object.keys(p.docs) as DocKey[]) {
+      const changed = p.docs[k].file !== prev.docs[k].file || p.docs[k].number !== prev.docs[k].number;
+      if (!asAdmin) p.docs[k].status = changed && (p.docs[k].file || p.docs[k].number) ? "Pending" : prev.docs[k].status;
+      if (!asAdmin && !changed) p.docs[k].note = prev.docs[k].note;
+    }
+    if (!asAdmin) p.role = prev.role; // role & responsibilities are admin-only
+    t.profile = { ...p, submittedAt: nowIso() };
+    if (!asAdmin) notify(d, "admin", "Technician profile updated", `${t.name} · ${p.empId}${Object.values(p.docs).some((x) => x.status === "Pending") ? " · documents to verify" : ""}`);
+    audit(d, by, "Technician profile saved", `${t.name} · ${p.empId}`);
+  });
+  return err;
+}
+
+export function setDocStatus(techId: string, key: DocKey, status: DocStatus, note: string, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const t = d.techs.find((x) => x.id === techId);
+    if (!t) { err = "Technician not found."; return; }
+    if (status === "Rejected" && !note.trim()) { err = "Give the reason for rejecting."; return; }
+    t.profile ??= emptyProfile(empIdOf(d, techId));
+    Object.assign(t.profile.docs[key], { status, note: note.trim(), at: nowIso() });
+    notify(d, `tech:${techId}`, `${DOC_LABEL[key]} ${status.toLowerCase()}`, status === "Rejected" ? `Please upload again — ${note.trim()}` : `Your ${DOC_LABEL[key]} is ${status.toLowerCase()}.`);
+    audit(d, by, "Document verification", `${t.name} · ${DOC_LABEL[key]} → ${status}`);
+  });
+  return err;
+}
+
+/** Admin sets each technician's job role and responsibilities. */
+export function setTechRole(techId: string, title: string, responsibilities: string[], by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    const t = d.techs.find((x) => x.id === techId);
+    if (!t) { err = "Technician not found."; return; }
+    const list = responsibilities.map((r) => r.trim()).filter(Boolean);
+    if (!title.trim()) { err = "Enter the job role."; return; }
+    if (!list.length) { err = "Add at least one responsibility."; return; }
+    t.profile ??= emptyProfile(empIdOf(d, techId));
+    t.profile.role = { title: title.trim(), responsibilities: list, setBy: by, at: nowIso() };
+    notify(d, `tech:${techId}`, "Your job role was updated", `${title.trim()} · ${list.length} responsibilities`);
+    audit(d, by, "Job role set", `${t.name} · ${title.trim()}`);
+  });
+  return err;
+}
+
+/** Birthday notification once a year, the first time the technician app opens on the day. */
+export function ensureBirthdayWish(techId: string, today: string) {
+  const d0 = getSnapshot();
+  const t = d0.techs.find((x) => x.id === techId);
+  if (!t?.profile?.personal.dob || daysToBirthday(t.profile.personal.dob, today) !== 0) return;
+  if (d0.notifications.some((n) => n.to === `tech:${techId}` && n.title.startsWith("Happy Birthday") && n.at.slice(0, 10) === today)) return;
+  mutate((d) => notify(d, `tech:${techId}`, `Happy Birthday, ${t.name.split(" ")[0]}! 🎂`, `Wishing you a wonderful year ahead — from the whole ${d.settings.company} family.`));
+}
+
+export function setPaymentInfo(p: PaymentInfo, by: string): Err {
+  let err: string | null = null;
+  mutate((d) => {
+    if (p.upi && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(p.upi.trim())) { err = "UPI ID must look like name@bank."; return; }
+    if (p.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(p.ifsc.trim().toUpperCase())) { err = "IFSC must look like SBIN0001234."; return; }
+    if (p.account && !/^\d{9,18}$/.test(p.account.trim())) { err = "Account number must be 9–18 digits."; return; }
+    d.paymentInfo = { ...p, upi: p.upi.trim(), ifsc: p.ifsc.trim().toUpperCase(), account: p.account.trim() };
+    audit(d, by, "Payment details updated", `${p.bankName} · ${p.upi}`);
+  });
+  return err;
 }

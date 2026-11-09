@@ -17,6 +17,7 @@ import {
   addOnWork, completeWork, decideQuote, declineJob, fieldRulesOf, markArrived, recordPayment, sendQuote, setFollowUp, setStatus, updateJob, verifyVisitOtp, visitChargeOnly,
 } from "../lib/store";
 import { InAppCall } from "../components/call";
+import { PaymentShareSheet } from "../components/PaymentShare";
 import { fmtDistance } from "../lib/field";
 import { propertyLine } from "../customer/SiteForm";
 
@@ -51,6 +52,7 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
   const move = (s: Job["status"], msg: string, note?: string) => { setStatus(job.id, s, by, note); flash(msg); };
   const rules = fieldRulesOf(db);
   const [calling, setCalling] = useState(false);
+  const [sharePay, setSharePay] = useState(false);
   const [otp, setOtp] = useState("");
   const [arriveErr, setArriveErr] = useState("");
   const [arrivePos, setArrivePos] = useState<{ lat: number; lng: number } | null>(null);
@@ -258,7 +260,8 @@ export function JobDetailPage({ db, job, tech, onBack, flash }: { db: Db; job: J
       {sheet === "add" && <AddItemSheet db={db} tech={tech} onClose={() => setSheet(null)} onAdd={(l) => { addLines([l]); flash(`${l.name} added`); }} />}
         {sheet === "addon" && <AddItemSheet db={db} tech={tech} title="Additional work (needs approval)" onClose={() => setSheet(null)} onAdd={(l) => { setSheet(null); addOnWork(job.id, [l], by); flash("Revised quotation sent for approval"); }} />}
         {sheet === "approve" && <OtpApproveSheet phone={c.phone} total={t.total} onClose={() => setSheet(null)} onApproved={() => { setSheet(null); decideQuote(job.id, true, "OTP", c.name); flash("Approved by customer"); }} />}
-        {sheet === "pay" && <CollectSheet due={t.due} onClose={() => setSheet(null)} onConfirm={(amt, m, ref) => { setSheet(null); recordPayment(job.id, amt, m, ref, by); flash(amt >= t.due ? "Paid in full · job closed" : `${inr(amt)} recorded · ${inr(t.due - amt)} due`); }} />}
+        {sharePay && <PaymentShareSheet db={db} amount={t.due} customer={site.contactName || c.name} phone={site.contactPhone || c.phone} refNo={job.invoice?.no ?? job.id} onClose={() => setSharePay(false)} flash={flash} />}
+        {sheet === "pay" && <CollectSheet due={t.due} onShare={() => setSharePay(true)} onClose={() => setSheet(null)} onConfirm={(amt, m, ref) => { setSheet(null); recordPayment(job.id, amt, m, ref, by); flash(amt >= t.due ? "Paid in full · job closed" : `${inr(amt)} recorded · ${inr(t.due - amt)} due`); }} />}
         {sheet === "followup" && <FollowUpSheet onClose={() => setSheet(null)} onSave={(d, n) => { setSheet(null); setFollowUp(job.id, d, n, by); flash("Follow-up scheduled"); }} />}
         {sheet === "invoice" && <BottomSheet title="Invoice" onClose={() => setSheet(null)}><InvoiceDoc job={job} db={db} kind="invoice" /><PrimaryButton onClick={() => window.print()} style={{ marginTop: 12 }}>Print / Share PDF</PrimaryButton></BottomSheet>}
       </div>
@@ -487,7 +490,7 @@ function OtpApproveSheet({ phone, total, onClose, onApproved }: { phone: string;
   );
 }
 
-function CollectSheet({ due, onClose, onConfirm }: { due: number; onClose: () => void; onConfirm: (amt: number, m: PayMethod, ref: string) => void }) {
+function CollectSheet({ due, onClose, onConfirm, onShare }: { due: number; onClose: () => void; onConfirm: (amt: number, m: PayMethod, ref: string) => void; onShare: () => void }) {
   const [m, setM] = useState<PayMethod>("UPI");
   const [amt, setAmt] = useState(String(due));
   const [ref, setRef] = useState("");
@@ -500,6 +503,7 @@ function CollectSheet({ due, onClose, onConfirm }: { due: number; onClose: () =>
         <p style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>{inr(due)}</p>
       </div>
       <div style={{ marginTop: 12 }}><Chips options={["UPI", "Cash", "Card"] as const} value={m as "UPI"} onChange={setM} /></div>
+      {m === "UPI" && <button type="button" onClick={onShare} className="press" style={{ width: "100%", marginTop: 10, border: "1.5px solid #111", background: "#fff", borderRadius: 10, padding: 11, fontWeight: 700, cursor: "pointer" }}>📲 Show QR / share bank details on WhatsApp</button>}
       <label style={{ display: "block", marginTop: 12 }}><span style={label}>Amount received</span><input inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/\D/g, "").slice(0, 7))} style={field} /></label>
       {needRef && <label style={{ display: "block", marginTop: 12 }}><span style={label}>Transaction / UTR reference</span><input value={ref} onChange={(e) => setRef(e.target.value.toUpperCase())} placeholder="e.g. 4123 5678 9012" style={field} /></label>}
       <p style={{ ...small, margin: "10px 4px 14px" }}>{n < due && n > 0 ? `Partial payment — ${inr(due - n)} will stay due.` : m === "UPI" ? "Show the Pushpak QR. Confirm only after the payment succeeds." : m === "Cash" ? "Cash is deposited at the office at the end of the day." : ""}</p>

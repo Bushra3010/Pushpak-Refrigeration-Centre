@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PhoneShell, PillNav, Toast } from "../components/ui";
-import { markRead, requestStock, setTechLocation, updateTech, useDb } from "../lib/store";
+import { ensureBirthdayWish, markRead, requestStock, setTechLocation, updateTech, useDb } from "../lib/store";
+import { BirthdayPopup } from "../components/Birthday";
+import { daysToBirthday } from "../lib/techprofile";
+import { isoDay } from "../lib/data";
 import { JobDetailPage } from "./JobDetail";
 import { Dashboard, NotificationSheet, ProfileScreen, SearchScreen, StockScreen, TechLogin } from "./TechScreens";
 import { CalculatorsHub, parseRoute, routeOf } from "./calc/Hub";
@@ -29,6 +32,15 @@ export default function TechnicianApp() {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => { setTechId(readSession()); }, []);
+  // Birthday: a notification, and a colourful greeting the first time the app opens that day.
+  const [bday, setBday] = useState(false);
+  const dob = db.techs.find((t) => t.id === techId)?.profile?.personal.dob ?? "";
+  useEffect(() => {
+    if (!techId || !dob || daysToBirthday(dob, isoDay(0)) !== 0) return;
+    ensureBirthdayWish(techId, isoDay(0));
+    const key = `prc:bday:${techId}:${isoDay(0)}`;
+    try { if (!localStorage.getItem(key)) { setBday(true); localStorage.setItem(key, "1"); } } catch { setBday(true); }
+  }, [techId, dob]);
   // Share live location while on duty (for "nearby technicians" in Admin dispatch); about once a minute.
   const onDutyNow = !!techId && db.techs.some((t) => t.id === techId && t.active && t.availability !== "Off Duty");
   useEffect(() => {
@@ -126,6 +138,7 @@ export default function TechnicianApp() {
         <NotificationSheet items={inbox} onClose={() => { setBell(false); markRead(`tech:${tech.id}`); }}
           onOpen={(n) => { markRead(`tech:${tech.id}`, n.id); setBell(false); if (n.jobId && db.jobs.some((j) => j.id === n.jobId && (j.techId === tech.id || (j.helpers ?? []).includes(tech.id)))) setOpenJob(n.jobId); }} />
       )}
+      {bday && tech && <BirthdayPopup name={tech.name} company={db.settings.company} onClose={() => setBday(false)} />}
       <Toast msg={toast} raised={showNav} />
     </PhoneShell>
   );

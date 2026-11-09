@@ -7,6 +7,7 @@ import {
   savePayroll, setJobSplit, setJobTeam, timerAction, addRepair, setRepairStatus, updateRepair,
   addBanner, updateBanner, deleteBanner, moveBanner, addPartEnquiry, setEnquiryStatus, createJob, changeJobSite, setStatus,
   createInspection, saveInspectionDraft, submitInspection, recordCustomerAck, inspectionDecision,
+  saveTechProfile, setDocStatus, setTechRole, ensureBirthdayWish, setPaymentInfo, profileOf,
   setFieldRules, markArrived, verifyVisitOtp, addAc, assignJob, logCall,
   receiveSample, addSampleSupplier, markSupplierMessageSent, setSupplierResponse, markCustomerInformed, closeSample,
 } from "@/app/lib/store";
@@ -14,6 +15,7 @@ import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
 import { distanceM, parseGps } from "@/app/lib/field";
 import { EMPTY_AC } from "@/app/components/service";
+import { daysToBirthday, paymentMessage, upiLink, EMPTY_PAYMENT } from "@/app/lib/techprofile";
 import { customerHistory, historyLabel } from "@/app/lib/history";
 import { emptySample, supplierMessage, customerMessage, customerUpdateDue } from "@/app/lib/samples";
 import { SPLIT_INDOOR, SPLIT_OUTDOOR, blankInspection, progress, submitProblems } from "@/app/lib/shifting";
@@ -271,5 +273,48 @@ describe("field rules: categories, 100 m arrival radius, visit OTP, in-app calls
     expect(j().customerVerified).toBe(true);
     logCall(id, "Rohit Kumar", "Rajesh", 75);
     expect(j().calls!.at(-1)).toMatchObject({ from: "Rohit Kumar", seconds: 75, via: "In-app" });
+  });
+});
+
+describe("technician registration, documents, role, birthday, payment details", () => {
+  it("documents go Pending, only admin verifies; Aadhaar keeps last 4; role is admin-only", () => {
+    const p = profileOf(db(), "t1");
+    expect(p.empId).toBe("PRC-T001");
+    p.docs.aadhaar.number = "123412341234"; p.docs.pan.number = "abcde1234f"; p.docs.iti.file = "data:image/jpeg;base64,x";
+    p.bank = { ...p.bank, account: "1234", ifsc: "SBIN0001234" };
+    expect(saveTechProfile("t1", p, "Rohit Kumar")).toMatch(/account/);
+    p.bank.account = "123456789012";
+    p.role = { title: "Supervisor", responsibilities: ["x"], setBy: "me", at: "" };
+    expect(saveTechProfile("t1", p, "Rohit Kumar")).toBeNull();
+    let q = db().techs.find((t) => t.id === "t1")!.profile!;
+    expect(q.docs.aadhaar.number).toBe("1234");
+    expect(q.docs.pan).toMatchObject({ number: "ABCDE1234F", status: "Pending" });
+    expect(q.docs.iti.status).toBe("Pending");
+    expect(q.role).toBeNull(); // technician cannot set own role
+    expect(setDocStatus("t1", "pan", "Rejected", "", "Admin")).toMatch(/reason/);
+    expect(setDocStatus("t1", "pan", "Verified", "", "Admin")).toBeNull();
+    expect(setTechRole("t1", "AC Technician", [], "Admin")).toMatch(/responsibility/);
+    expect(setTechRole("t1", "AC Technician", ["Attend jobs on time", " "], "Admin")).toBeNull();
+    q = db().techs.find((t) => t.id === "t1")!.profile!;
+    expect(q.docs.pan.status).toBe("Verified");
+    expect(q.role).toMatchObject({ title: "AC Technician", responsibilities: ["Attend jobs on time"] });
+  });
+  it("birthday maths and one wish notification per day", () => {
+    expect(daysToBirthday("1995-11-09", "2026-11-09")).toBe(0);
+    expect(daysToBirthday("1995-11-10", "2026-11-09")).toBe(1);
+    expect(daysToBirthday("1995-01-01", "2026-12-31")).toBe(1);
+    const today = new Date().toISOString().slice(0, 10);
+    const p = profileOf(db(), "t2"); p.personal.dob = `1990-${today.slice(5)}`;
+    expect(saveTechProfile("t2", p, "Admin", true)).toBeNull();
+    ensureBirthdayWish("t2", today); ensureBirthdayWish("t2", today);
+    expect(db().notifications.filter((n) => n.to === "tech:t2" && n.title.startsWith("Happy Birthday")).length).toBe(1);
+  });
+  it("payment details validate and build the WhatsApp text + UPI link", () => {
+    expect(setPaymentInfo({ ...EMPTY_PAYMENT, upi: "bad" }, "Admin")).toMatch(/UPI/);
+    const pi = { ...EMPTY_PAYMENT, holder: "Pushpak Refrigeration Centre", bankName: "SBI", account: "123456789012", ifsc: "sbin0001234", upi: "pushpak@okhdfcbank" };
+    expect(setPaymentInfo(pi, "Admin")).toBeNull();
+    expect(db().paymentInfo!.ifsc).toBe("SBIN0001234");
+    expect(upiLink(db().paymentInfo!, 1500)).toMatch(/^upi:\/\/pay\?pa=pushpak%40okhdfcbank.*&am=1500\.00/);
+    expect(paymentMessage(db().paymentInfo!, "Pushpak", { customer: "Rajesh", amount: 1500 })).toMatch(/Dear Rajesh[\s\S]*₹1,500[\s\S]*IFSC: SBIN0001234/);
   });
 });

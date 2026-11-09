@@ -12,6 +12,7 @@ import type { PartEnquiry, PromoBanner } from "./promo";
 import type { ShiftingInspection } from "./shifting";
 import type { SampleEnquiry } from "./samples";
 import type { CallLog, FieldRules, ServiceCategory } from "./field";
+import type { PaymentInfo, TechProfile } from "./techprofile";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -248,6 +249,8 @@ export interface Technician {
   skills: string[];
   area: string;
   availability: "Available" | "On Job" | "Off Duty";
+  /** registration: personal, family, documents, bank, uniform, admin-set role (techprofile.ts) */
+  profile?: TechProfile;
   /** last shared live location (technician app, while on duty) */
   loc?: { lat: number; lng: number; at: string };
   active: boolean;
@@ -362,6 +365,8 @@ export interface Db {
   inspectionRules?: { faultPhotoRequired: boolean };
   /** counter: customer spare-part samples + supplier / customer follow-up (app/lib/samples.ts) */
   samples?: SampleEnquiry[];
+  /** shop bank / UPI / QR details technicians share with customers (techprofile.ts) */
+  paymentInfo?: PaymentInfo;
   /** field rules: categories, geofence, nearby radius, visit OTP, in-app call, break limit (field.ts) */
   fieldRules?: FieldRules;
   /** suppliers the counter has messaged before (name + WhatsApp) */

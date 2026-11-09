@@ -1,6 +1,7 @@
 "use client";
 
 import { TechLiveBoard } from "./Field";
+import { ProfileBadge, TechProfileModal } from "./TechAdmin";
 import { useMemo, useState } from "react";
 import { AcForm, AcHistory, AcSpecs, EMPTY_AC, JOB_TONE, type AcDraft } from "../components/service";
 import { Chips } from "../components/ui";
@@ -229,6 +230,7 @@ export function AcAssetsSection({ db, openJob }: { db: Db; openJob: (id: string)
 export function TechniciansSection({ db, who, notify }: { db: Db; who: string; notify: (m: string) => void }) {
   const [adding, setAdding] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
+  const [profile, setProfile] = useState<string | null>(null);
   const stats = (id: string) => {
     const mine = db.jobs.filter((j) => j.techId === id);
     const done = mine.filter(isDone);
@@ -257,18 +259,21 @@ export function TechniciansSection({ db, who, notify }: { db: Db; who: string; n
         <Table rows={db.techs} rowKey={(x) => x.id} cols={[
           { key: "n", head: "Technician", render: (x) => <div style={{ display: "flex", gap: 10, alignItems: "center" }}><Initials name={x.name} /><div><b>{x.name}</b><div style={muted}>+91 {x.phone} · ★{x.rating || "—"}</div></div></div> },
           { key: "s", head: "Skills / area", render: (x) => <><div style={{ fontSize: 12 }}>{x.skills.join(", ")}</div><div style={muted}>{x.area}</div></> },
+          { key: "p", head: "Registration", render: (x) => <ProfileBadge db={db} techId={x.id} /> },
           { key: "a", head: "Availability", render: (x) => !x.active ? <Badge tone="grey">Inactive</Badge> : <Badge tone={x.availability === "Available" ? "green" : x.availability === "On Job" ? "blue" : "grey"}>{x.availability}</Badge> },
           { key: "w", head: "Workload", align: "center", render: (x) => { const s = stats(x.id); return <>{s.today} today<div style={muted}>{s.open} open</div></>; } },
           { key: "c", head: "Completion", align: "center", render: (x) => `${stats(x.id).rate}%` },
           { key: "v", head: "Avg job", align: "right", render: (x) => inr(stats(x.id).avg) },
           { key: "u", head: "Upsell", align: "right", render: (x) => inr(stats(x.id).upsell) },
           { key: "x", head: "", align: "right", render: (x) => <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+            <Btn small onClick={() => setProfile(x.id)}>Profile & docs</Btn>
             <Btn small kind="ghost" onClick={() => setEdit(x.id)}>Edit</Btn>
             <Btn small kind={x.active ? "danger" : "primary"} onClick={() => { updateTech(x.id, { active: !x.active, availability: x.active ? "Off Duty" : "Available" }, who); notify(`${x.name} ${x.active ? "deactivated" : "activated"}`); }}>{x.active ? "Deactivate" : "Activate"}</Btn>
           </div> },
         ]} />
       </Panel>
       {adding && <TechForm onClose={() => setAdding(false)} onSave={(d) => { addTech({ ...d, availability: "Available", active: true }, who); setAdding(false); notify(`${d.name} added`); }} />}
+      {profile && <TechProfileModal db={db} techId={profile} who={who} notify={notify} onClose={() => setProfile(null)} />}
       {t && <TechForm initial={t} onClose={() => setEdit(null)} onSave={(d) => { updateTech(t.id, d, who); setEdit(null); notify("Technician updated"); }} />}
     </>
   );

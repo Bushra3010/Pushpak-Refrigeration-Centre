@@ -1,5 +1,6 @@
 "use client";
 
+import { BirthdaysPanel } from "./TechAdmin";
 import { JOB_TONE } from "../components/service";
 import { acSummary, daysBetween, inr, isDone, isOpen, jobTotals, relDay, today, type Db } from "../lib/data";
 import { custName, overdue } from "./Jobs";
@@ -62,6 +63,7 @@ export function Dashboard({ db, go, openJob }: { db: Db; go: (s: Section) => voi
         <Stat label="Pending payments" value={inr(pendingPay.reduce((x, j) => x + jobTotals(j, s).due, 0))} sub={`${plural(pendingPay.length, "invoice")} · upsell ${inr(upsellRev)}`} tone="amber" />
       </div>
 
+      <BirthdaysPanel db={db} notify={() => {}} />
       <div className="admin-grid-2">
         <Panel title="Job pipeline" actions={<Btn kind="ghost" small onClick={() => go("jobs")}>Dispatch</Btn>}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
