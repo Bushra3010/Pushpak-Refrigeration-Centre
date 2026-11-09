@@ -12,6 +12,7 @@ import {
   addSampleSupplier, closeSample, markCustomerInformed, sampleNextAction, markSupplierMessageSent, receiveSample, reopenSample, setCustomerReply, setSupplierResponse, updateSample,
 } from "../lib/store";
 import { Badge, Btn, Filter, Modal, Panel, SearchBox, Stat, Table, fieldLabel, input, muted } from "./kit";
+import { customerHistory, historyLabel } from "../lib/history";
 
 /* Admin → Sample Enquiries: counter staff receive a customer's old part as a sample, ask suppliers on
  * WhatsApp, record their answers and keep the customer updated (2-day rules). Entered manually. */
@@ -196,6 +197,7 @@ function CustomerPicker({ db, value, onChange, onPhone, known }: { db: Db; value
           </div>
           <Btn small kind="ghost" onClick={() => onChange(emptySample().customer)}>Change</Btn>
         </div>
+        <CustomerHistory db={db} customerId={linked.id} phone={linked.phone} />
         <L t="Landmark / note for this sample"><input value={value.landmark ?? ""} onChange={(e) => set({ landmark: e.target.value })} placeholder="Optional" style={input} /></L>
       </div>
     );
@@ -233,6 +235,41 @@ function CustomerPicker({ db, value, onChange, onPhone, known }: { db: Db; value
         <L t="Customer type"><select value={value.type ?? "Residential"} onChange={(e) => set({ type: e.target.value as SampleCustomer["type"] })} style={input}>{CUSTOMER_TYPES.map((t) => <option key={t}>{t}</option>)}</select></L>
         <L t="Preferred contact"><select value={value.contactPref ?? "WhatsApp"} onChange={(e) => set({ contactPref: e.target.value as SampleCustomer["contactPref"] })} style={input}><option>WhatsApp</option><option>Call</option></select></L>
       </div>
+    </div>
+  );
+}
+
+const H_TONE = { Done: "green", Open: "amber", Cancelled: "grey" } as const;
+
+/** Last history of a customer: last enquiry, whether it was done, and in how many days. */
+export function CustomerHistory({ db, customerId, phone, limit = 5 }: { db: Db; customerId: string | null; phone: string; limit?: number }) {
+  const all = customerHistory(db, customerId, phone);
+  const [more, setMore] = useState(false);
+  if (!all.length) return <p style={{ ...muted, margin: "8px 0 0" }}>No earlier enquiries or service history.</p>;
+  const last = all[0];
+  const done = all.filter((h) => h.state === "Done");
+  const avg = done.length ? Math.round(done.reduce((s, h) => s + h.days, 0) / done.length) : null;
+  const rows = more ? all : all.slice(0, limit);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".04em", color: "var(--ink-mute)" }}>LAST ENQUIRY</div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+          <b style={{ fontSize: 13.5 }}>{last.kind}: {last.title}</b>
+          <Badge tone={H_TONE[last.state]}>{historyLabel(last)}</Badge>
+        </div>
+        <div style={muted}>{last.id} · came in {fmtDate(last.at)}{last.doneAt && last.state === "Done" ? ` · done ${fmtDate(last.doneAt)}` : ""} · {last.status}</div>
+      </div>
+      <div style={{ ...muted, margin: "8px 0 4px" }}>
+        History: {all.length} enquir{all.length === 1 ? "y" : "ies"} · {done.length} done · {all.filter((h) => h.state === "Open").length} open{avg != null ? ` · usually done in ${avg} day${avg === 1 ? "" : "s"}` : ""}
+      </div>
+      {rows.slice(1).map((h) => (
+        <div key={h.kind + h.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "5px 0", borderTop: "1px solid var(--line)", fontSize: 12.5 }}>
+          <span style={{ minWidth: 0 }}><b>{h.kind}</b> · {h.title}<span style={muted}> · {fmtDate(h.at)}</span></span>
+          <Badge tone={H_TONE[h.state]}>{historyLabel(h)}</Badge>
+        </div>
+      ))}
+      {all.length > limit && <button type="button" onClick={() => setMore(!more)} style={{ background: "none", border: "none", padding: "4px 0", fontSize: 12.5, fontWeight: 700, cursor: "pointer", color: "var(--ink)" }}>{more ? "Show less" : `Show all ${all.length}`}</button>}
     </div>
   );
 }
@@ -382,6 +419,7 @@ function CustomerTab({ db, s, who, notify, onBack, initialTpl }: { db: Db; s: Sa
       <div style={{ background: "var(--surface-dim)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
         <b>👤 {s.customer.name}</b> · +91 {s.customer.phone}{s.customer.altPhone ? ` / ${s.customer.altPhone}` : ""}{s.customer.contactPref ? ` · prefers ${s.customer.contactPref}` : ""}
         <div style={{ color: "var(--ink-soft)", marginTop: 2 }}>{s.customer.address}{s.customer.area ? `, ${s.customer.area}` : ""}{s.customer.landmark ? ` · near ${s.customer.landmark}` : ""}{s.customer.gps && <> · <a href={`https://maps.google.com/?q=${s.customer.gps}`} target="_blank" rel="noreferrer">Map ↗</a></>}</div>
+        <details style={{ marginTop: 6 }}><summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>Customer history</summary><CustomerHistory db={db} customerId={s.customer.customerId} phone={s.customer.phone} /></details>
       </div>
       <b style={{ fontSize: 16 }}>Customer WhatsApp update</b>
       <L t="Customer message template"><select value={tpl} onChange={(e) => setTpl(e.target.value as CustomerTemplate)} style={{ ...input, marginTop: 8 }}>{CUSTOMER_TEMPLATES.map((x) => <option key={x}>{x}</option>)}</select></L>

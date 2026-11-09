@@ -14,6 +14,7 @@ import { emptyDraft } from "@/app/components/repair";
 import { liveBanners } from "@/app/lib/promo";
 import { distanceM, parseGps } from "@/app/lib/field";
 import { EMPTY_AC } from "@/app/components/service";
+import { customerHistory, historyLabel } from "@/app/lib/history";
 import { emptySample, supplierMessage, customerMessage, customerUpdateDue } from "@/app/lib/samples";
 import { SPLIT_INDOOR, SPLIT_OUTDOOR, blankInspection, progress, submitProblems } from "@/app/lib/shifting";
 
@@ -232,6 +233,14 @@ describe("counter: spare-part sample enquiries", () => {
     expect(closeSample(r.id, "", "Counter")).toMatch(/why/);
     expect(closeSample(r.id, "Part sold / fitted", "Counter")).toBeNull();
     expect(x().status).toBe("Closed");
+    // Customer 360 history: the closed sample shows as done; the open one for the new customer as open
+    const h = customerHistory(db(), "c1", "9876543210");
+    expect(h.find((i) => i.id === r.id)).toMatchObject({ kind: "Sample", state: "Done", days: 0 });
+    expect(h.some((i) => i.kind === "Service")).toBe(true);
+    expect(historyLabel(h.find((i) => i.id === r.id)!)).toBe("Done same day");
+    const hn = customerHistory(db(), null, "9840101130");
+    expect(hn[0]).toMatchObject({ id: nr.id, state: "Open" });
+    expect(historyLabel(hn[0])).toMatch(/^Open for 0 days$/);
   });
 });
 
