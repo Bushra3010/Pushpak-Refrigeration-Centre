@@ -131,6 +131,22 @@ export function TechRegistration({ db, techId, asAdmin, who, flash }: { db: Db; 
           <F l="GPay number"><input inputMode="tel" value={p.bank.gpay} onChange={(e) => set("bank", { gpay: e.target.value.replace(/\D/g, "").slice(0, 10) })} style={fld} /></F>
           <F l="UPI ID"><input value={p.bank.upi} onChange={(e) => set("bank", { upi: e.target.value.trim() })} placeholder="name@okhdfc" style={fld} /></F>
         </div>
+        <div style={{ marginBottom: 12 }}><span style={lab}>GPay / PhonePe QR scanner photo</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            {p.bank.qr
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={p.bank.qr} alt="My payment QR code" style={{ width: 120, height: 120, objectFit: "contain", borderRadius: 12, border: "1px solid var(--line)", background: "#fff" }} />
+              : <div aria-hidden style={{ width: 120, height: 120, borderRadius: 12, border: "1.5px dashed var(--line-strong)", display: "grid", placeItems: "center", fontSize: 34, color: "var(--ink-mute)" }}>▦</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label className="press" style={{ border: "1.5px solid #111", borderRadius: 999, padding: "9px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer", textAlign: "center" }}>
+                📷 {p.bank.qr ? "Change QR photo" : "Upload QR photo"}
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => photo(e.target.files, (u) => set("bank", { qr: u }))} />
+              </label>
+              {p.bank.qr && <button type="button" onClick={() => set("bank", { qr: null })} style={{ background: "none", border: "none", color: "var(--error-text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Remove</button>}
+            </div>
+          </div>
+          <span style={{ display: "block", fontSize: 12, color: "var(--ink-soft)", marginTop: 6 }}>Open GPay / PhonePe → your profile → QR code → screenshot, then upload it here. The office uses it to pay salary and incentives.</span>
+        </div>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: "0 0 10px" }}>Used for salary, incentives and expense reimbursement. Upload a cancelled cheque / passbook under Documents → Bank Proof.</p>
       </>}
 
@@ -215,13 +231,17 @@ function Preview({ p, name, phone, joined }: { p: TechProfile; name: string; pho
     ["Mobile", phone], ["Date of joining", joined], ["Date of birth", v(p.personal.dob)], ["Blood group", v(p.personal.bloodGroup)], ["Address", v(p.personal.address)],
     ["Father name", v(p.family.fatherName)], ["Emergency contact", p.family.emergencyPhone ? `${p.family.emergencyName} (${p.family.emergencyRelation}) ${p.family.emergencyPhone}` : "Not entered"],
     ["Aadhaar last 4", v(p.docs.aadhaar.number.slice(-4))], ["PAN", v(p.docs.pan.number)], ["ITI certificate", v(p.docs.iti.number || (p.docs.iti.file ? "Uploaded" : ""))], ["Driving licence", v(p.docs.licence.number)],
-    ["Bank", v(p.bank.bankName)], ["Bank account", p.bank.account ? maskAccount(p.bank.account) : "Not entered"], ["GPay", v(p.bank.gpay)], ["UPI", v(p.bank.upi)],
+    ["Bank", v(p.bank.bankName)], ["Bank account", p.bank.account ? maskAccount(p.bank.account) : "Not entered"], ["GPay", v(p.bank.gpay)], ["UPI", v(p.bank.upi)], ["Payment QR", p.bank.qr ? "Uploaded" : "Not entered"],
     ["T-shirt size", v(p.uniform.tshirt)], ["Safety shoes", v(p.uniform.shoes)], ["Uniform issued", p.uniform.issued.join(", ") || "None yet"],
   ];
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 14 }}>
       <p style={{ margin: "0 0 2px", fontSize: 17, fontWeight: 800 }}>👤 {name}</p>
       <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--ink-soft)" }}>{p.empId} · {p.designation}</p>
+      {p.bank.qr && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.bank.qr} alt="Payment QR code" style={{ display: "block", width: 140, height: 140, objectFit: "contain", margin: "0 auto 10px", borderRadius: 12, border: "1px solid var(--line)", background: "#fff" }} />
+      )}
       {rows.map(([k, val]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid var(--line)", fontSize: 13.5 }}><span style={{ color: "var(--ink-soft)" }}>{k}</span><b style={{ textAlign: "right", color: val === "Not entered" ? "var(--ink-mute)" : undefined }}>{val}</b></div>)}
     </div>
   );

@@ -29,7 +29,7 @@ export interface TechProfile {
   personal: { dob: string; bloodGroup: string; address: string; altPhone: string };
   family: { fatherName: string; motherName: string; spouseName: string; emergencyName: string; emergencyRelation: string; emergencyPhone: string };
   docs: Record<DocKey, DocItem>;
-  bank: { holder: string; bankName: string; account: string; ifsc: string; gpay: string; upi: string };
+  bank: { holder: string; bankName: string; account: string; ifsc: string; gpay: string; upi: string; /** GPay / PhonePe QR scanner photo */ qr?: string | null };
   uniform: { tshirt: string; trouser: string; shoes: string; issued: string[] };
   /** set by admin */
   role: { title: string; responsibilities: string[]; setBy: string; at: string } | null;
@@ -44,7 +44,7 @@ export function emptyProfile(empId: string): TechProfile {
     personal: { dob: "", bloodGroup: "", address: "", altPhone: "" },
     family: { fatherName: "", motherName: "", spouseName: "", emergencyName: "", emergencyRelation: "", emergencyPhone: "" },
     docs: Object.fromEntries(DOC_KEYS.map((k) => [k, emptyDoc()])) as Record<DocKey, DocItem>,
-    bank: { holder: "", bankName: "", account: "", ifsc: "", gpay: "", upi: "" },
+    bank: { holder: "", bankName: "", account: "", ifsc: "", gpay: "", upi: "", qr: null },
     uniform: { tshirt: "L", trouser: "", shoes: "8", issued: [] },
     role: null,
   };
