@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { fmtDateTime, isOpen, isoDay, siteOf, type Db, type Job } from "../lib/data";
-import { CATEGORY_ICON, SERVICE_CATEGORIES, breakToday, distanceM, fmtDistance, parseGps, type FieldRules, type ServiceCategory } from "../lib/field";
+import { CATEGORY_ICON, SERVICE_CATEGORIES, breakToday, distanceM, isCongested, fmtDistance, parseGps, type FieldRules, type ServiceCategory } from "../lib/field";
 import { fieldRulesOf, setFieldRules } from "../lib/store";
 import { Badge, Btn, Panel, Table, fieldLabel, input, muted } from "./kit";
 
@@ -80,7 +80,7 @@ export function TechLiveBoard({ db }: { db: Db }) {
 export function JobFieldInfo({ db, job }: { db: Db; job: Job }) {
   const rules = fieldRulesOf(db);
   const s = siteOf(job, db.customers.find((c) => c.id === job.customerId));
-  const prop = [s.propertyType, [s.building, s.unit].filter(Boolean).join(", "), s.floor, s.lift ? `Lift: ${s.lift}` : "", s.areaType === "Congested Area" ? `Congested (${(s.congested ?? []).join(", ") || "no details"})` : ""].filter(Boolean).join(" · ");
+  const prop = [s.propertyType, [s.building, s.unit].filter(Boolean).join(", "), s.floor, s.lift ? `Lift: ${s.lift}` : "", isCongested(s.areaType) ? `${s.areaType} (${(s.congested ?? []).join(", ") || "no details"})` : ""].filter(Boolean).join(" · ");
   const row = (k: string, v: React.ReactNode) => <div style={{ display: "flex", gap: 10, fontSize: 13, padding: "4px 0" }}><span style={{ ...muted, width: 120, flexShrink: 0 }}>{k}</span><span>{v}</span></div>;
   return (
     <div style={{ marginTop: 8 }}>

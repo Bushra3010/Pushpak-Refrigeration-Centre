@@ -8,6 +8,7 @@ import { AcForm, EMPTY_AC, type AcDraft } from "../components/service";
 import { Chips, Footer, PageHeader, PrimaryButton, field, label, small } from "../components/ui";
 import { DEMO_OTP, type CustomerType, type ContactPref } from "../lib/data";
 import type { NewCustomer } from "../lib/store";
+import { LocationDetails, locationProblem } from "./SiteForm";
 
 /** Catchy lines that rotate on the welcome screen — one promise each, short enough for a phone. */
 export const WELCOME_LINES: { eyebrow: string; title: string; text: string }[] = [
@@ -115,7 +116,7 @@ export function LoginScreen({ onVerified }: { onVerified: (phone: string) => voi
 
 /* ───────────────────────── Customer details (PRD §3A) ───────────────────────── */
 
-export type ProfileDraft = Pick<NewCustomer, "name" | "phone" | "altPhone" | "address" | "area" | "gps" | "type" | "contactPref">;
+export type ProfileDraft = Pick<NewCustomer, "name" | "phone" | "altPhone" | "address" | "area" | "gps" | "type" | "contactPref" | "property">;
 
 const TYPES: CustomerType[] = ["Residential", "Office", "Shop", "Commercial", "Other"];
 
@@ -158,22 +159,35 @@ export function ProfileForm({ value, onChange }: { value: ProfileDraft; onChange
 
 export const profileValid = (p: ProfileDraft) => p.name.trim().length >= 2 && p.address.trim().length >= 8 && (!p.altPhone || /^[6-9]\d{9}$/.test(p.altPhone));
 
-/** First-run for a new number: customer details, then the first AC. */
+/** First-run for a new number: customer details, service location details, then the first AC. */
 export function SignupFlow({ phone, onDone }: { phone: string; onDone: (profile: ProfileDraft, ac: AcDraft | null) => void }) {
-  const [step, setStep] = useState<0 | 1>(0);
-  const [p, setP] = useState<ProfileDraft>({ name: "", phone, altPhone: "", address: "", area: "", gps: "", type: "Residential", contactPref: "WhatsApp" });
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [p, setP] = useState<ProfileDraft>({ name: "", phone, altPhone: "", address: "", area: "", gps: "", type: "Residential", contactPref: "WhatsApp", property: {} });
   const [ac, setAc] = useState<AcDraft>(EMPTY_AC);
+  const [tried, setTried] = useState(false);
+  const locErr = locationProblem(p.property ?? {});
+  const go = (n: 0 | 1 | 2) => { setStep(n); document.querySelector(".no-scroll")?.scrollTo({ top: 0 }); };
+  const titles = ["Your details", "Service Location Details", "Add your AC"];
 
   return (
     <div className="no-scroll" style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      <PageHeader title={step === 0 ? "Your details" : "Add your AC"} sub={`Step ${step + 1} of 2`} onBack={step === 1 ? () => setStep(0) : undefined} />
+      <PageHeader title={titles[step]} sub={`Step ${step + 1} of 3`} onBack={step > 0 ? () => go((step - 1) as 0 | 1) : undefined} />
       <div style={{ padding: "0 16px 8px", flex: 1 }}>
-        {step === 0 ? (
+        {step === 0 && (
           <>
             <p style={{ ...small, margin: "0 0 14px" }}>We use this to reach you and send the technician to the right place.</p>
             <ProfileForm value={p} onChange={setP} />
           </>
-        ) : (
+        )}
+        {step === 1 && (
+          <>
+            <p style={{ ...small, margin: "0 0 4px" }}>Tell us about the place — the technician comes prepared (ladder, parking, lift, extra hands).</p>
+            <p style={{ ...small, margin: 0, fontWeight: 600 }}>📍 {p.address}{p.area ? `, ${p.area}` : ""}</p>
+            <LocationDetails value={p.property ?? {}} onChange={(property) => setP({ ...p, property })} review />
+            {tried && locErr && <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 700, color: "var(--error-text)" }}>{locErr}</p>}
+          </>
+        )}
+        {step === 2 && (
           <>
             <p style={{ ...small, margin: "0 0 14px" }}>Each AC gets its own service history. You can add more ACs later.</p>
             <AcForm value={ac} onChange={setAc} />
@@ -181,14 +195,14 @@ export function SignupFlow({ phone, onDone }: { phone: string; onDone: (profile:
         )}
       </div>
       <Footer>
-        {step === 0
-          ? <PrimaryButton disabled={!profileValid(p)} onClick={() => setStep(1)}>Next</PrimaryButton>
-          : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <PrimaryButton disabled={!ac.brand} onClick={() => onDone(p, ac)}>Save &amp; Continue</PrimaryButton>
-              <button onClick={() => onDone(p, null)} style={{ background: "none", border: "none", color: "var(--ink-soft)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 6 }}>Skip — I&apos;ll add my AC later</button>
-            </div>
-          )}
+        {step === 0 && <PrimaryButton disabled={!profileValid(p)} onClick={() => go(1)}>Next</PrimaryButton>}
+        {step === 1 && <PrimaryButton onClick={() => { setTried(true); if (!locErr) go(2); }}>Next — Add your AC</PrimaryButton>}
+        {step === 2 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <PrimaryButton disabled={!ac.brand} onClick={() => onDone(p, ac)}>Save &amp; Continue</PrimaryButton>
+            <button onClick={() => onDone(p, null)} style={{ background: "none", border: "none", color: "var(--ink-soft)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 6 }}>Skip — I&apos;ll add my AC later</button>
+          </div>
+        )}
       </Footer>
     </div>
   );

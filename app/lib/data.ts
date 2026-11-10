@@ -13,6 +13,8 @@ import type { ShiftingInspection } from "./shifting";
 import type { SampleEnquiry } from "./samples";
 import type { CallLog, FieldRules, ServiceCategory } from "./field";
 import type { PaymentInfo, TechProfile } from "./techprofile";
+import type { LpgCylinder, RentPayment, RentRoom, StaffTask } from "./welfare";
+import type { ToolIssue, ToolRental } from "./tools";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -42,6 +44,15 @@ export interface Customer {
   createdAt: string;
   amc: AmcPlan | null;
   mergedInto?: string; // set when an admin merges a duplicate record
+  /** service location details captured at sign-up; pre-fills every booking */
+  property?: PropertyInfo;
+}
+
+/** Service location details: area category, premises type and how to find / reach the unit. */
+export interface PropertyInfo {
+  areaType?: string; // Residential / Commercial / Congested Commercial / Industrial Area (older: Standard / Congested Area)
+  propertyType?: string; building?: string; unit?: string; floor?: string; lift?: "Yes" | "No" | "Not Sure";
+  congested?: string[]; instructions?: string;
 }
 
 export const APPLICATIONS = ["Bedroom", "Hall", "Office", "Shop", "Server Room", "Commercial", "Other"] as const;
@@ -175,11 +186,8 @@ export type JobStatus = (typeof JOB_FLOW)[number] | "Cancelled";
 export interface TimelineEntry { status: string; at: string; by: string; note?: string }
 
 /** Where this visit happens — usually the customer's saved address, but a booking can use another. */
-export interface ServiceSite {
+export interface ServiceSite extends PropertyInfo {
   address: string; area: string; landmark: string; contactName: string; contactPhone: string; gps: string;
-  /** property identification (optional on older bookings) */
-  propertyType?: string; building?: string; unit?: string; floor?: string; lift?: "Yes" | "No" | "Not Sure";
-  areaType?: "Standard Area" | "Congested Area"; congested?: string[]; instructions?: string;
 }
 
 /** The job's service address, falling back to the customer's saved address for older bookings. */
@@ -371,6 +379,14 @@ export interface Db {
   fieldRules?: FieldRules;
   /** suppliers the counter has messaged before (name + WhatsApp) */
   suppliers?: { name: string; phone: string }[];
+  /** staff welfare: mess LPG cylinders, room rent, auto shop-staff tasks (welfare.ts) */
+  cylinders?: LpgCylinder[];
+  rooms?: RentRoom[];
+  rentPayments?: RentPayment[];
+  staffTasks?: StaffTask[];
+  /** shop tools issued to technicians + tools hired from outside (tools.ts) */
+  toolIssues?: ToolIssue[];
+  toolRentals?: ToolRental[];
   /** true once the sample records were cleared (fresh start) */
   clean?: boolean;
   /** saved-data schema version (see upgradeDb) */

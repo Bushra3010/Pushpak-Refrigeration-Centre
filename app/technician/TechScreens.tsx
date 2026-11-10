@@ -76,9 +76,9 @@ export function TechLogin({ db, onDone }: { db: Db; onDone: (techId: string) => 
 type JobTab = "today" | "upcoming" | "done";
 const ACTIVE = (j: Job) => isOpen(j) || (j.status === "Invoiced");
 
-export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSearch, onCalc, onStock, onRepairs, onShifting }: {
+export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSearch, onCalc, onStock, onRepairs, onShifting, onLpg, onTools }: {
   db: Db; tech: Technician; unread: number; onOpen: (id: string) => void; onBell: () => void; onToggleDuty: (on: boolean) => void;
-  onSearch?: () => void; onCalc?: (id?: string) => void; onStock?: () => void; onRepairs?: () => void; onShifting?: () => void;
+  onSearch?: () => void; onCalc?: (id?: string) => void; onStock?: () => void; onRepairs?: () => void; onShifting?: () => void; onLpg?: () => void; onTools?: () => void;
 }) {
   const [tab, setTab] = useState<JobTab>("today");
   const mine = db.jobs.filter((j) => j.techId === tech.id || (j.helpers ?? []).includes(tech.id));
@@ -115,6 +115,8 @@ export function Dashboard({ db, tech, unread, onOpen, onBell, onToggleDuty, onSe
           { icon: "🟠", label: "Copper Pipe Solver", onClick: () => onCalc("copper-solver") },
           ...(onShifting ? [{ icon: "🚚", label: "AC Shifting Inspection", onClick: onShifting, count: (db.inspections ?? []).filter((i) => i.techId === tech.id && (i.status === "Draft" || i.status === "Correction Required")).length }] : []),
           ...(onRepairs ? [{ icon: "🔌", label: "Repair Register", onClick: onRepairs, count: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length }] : []),
+          ...(onTools ? [{ icon: "🧰", label: "My Tools", onClick: onTools, count: (db.toolIssues ?? []).filter((x) => !x.ret && x.techId === tech.id).length }] : []),
+          ...(onLpg ? [{ icon: "🔥", label: "Mess LPG", onClick: onLpg }] : []),
           ...(onSearch ? [{ icon: "👥", label: "My Customers", onClick: onSearch }] : []),
           ...(onStock ? [{ icon: "📦", label: "Van Stock", onClick: onStock }] : []),
         ]} />

@@ -48,9 +48,18 @@ export const newVisitOtp = () => String(Math.floor(1000 + Math.random() * 9000))
 
 export interface CallLog { id: string; at: string; jobId: string | null; from: string; to: string; seconds: number; via: "In-app" }
 
-export const PROPERTY_TYPES = ["House / Villa", "Flat / Apartment", "Office", "Shop", "Warehouse / Godown", "Other"] as const;
+export const PROPERTY_TYPES = [
+  "Apartment / Flat", "Residential Building", "Independent House", "Individual Villa", "Commercial Building", "Commercial Complex",
+  "Shopping Complex", "Shop / Showroom", "Office", "Factory / Industrial", "Warehouse / Godown", "Other",
+] as const;
+export const PROPERTY_ICON: Record<string, string> = {
+  "Apartment / Flat": "🏢", "Residential Building": "🏢", "Independent House": "🏠", "Individual Villa": "🏡", "Commercial Building": "🏬", "Commercial Complex": "🏬",
+  "Shopping Complex": "🛍️", "Shop / Showroom": "🏪", Office: "💼", "Factory / Industrial": "🏭", "Warehouse / Godown": "📦", Other: "📍",
+};
 export const FLOORS = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor", "5th Floor", "6th – 10th Floor", "Above 10th Floor"] as const;
-export const AREA_TYPES = ["Standard Area", "Congested Area"] as const;
+export const AREA_CATEGORIES = ["Residential Area", "Commercial Area", "Congested Commercial Area", "Industrial Area"] as const;
+/** Congested areas get the access checklist (also matches the older "Congested Area" value). */
+export const isCongested = (areaType?: string) => !!areaType && /congested/i.test(areaType);
 export const CONGESTED_CHECKLIST = ["Narrow lane — van cannot reach", "No parking nearby", "Heavy traffic / market area", "Ladder must be carried by hand", "Stairs only, no lift", "Society entry permission needed"] as const;
 
 /** Break minutes today and whether a break is running, from the technician's timer logs. */

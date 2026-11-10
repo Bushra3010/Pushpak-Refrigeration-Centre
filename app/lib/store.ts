@@ -22,6 +22,8 @@ import { DOC_LABEL, aadhaarLast4, daysToBirthday, emptyProfile, profileProblems,
 import { DEFAULT_FIELD_RULES, distanceM, newVisitOtp, parseGps, type FieldRules } from "./field";
 import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
+import { currentCylinder, daysOf, dueTasks, validateLpg, validateRoom, type LpgCylinder, type LpgDraft, type RentPayment, type RoomDraft } from "./welfare";
+import { missingOf, rentalCalc, returnProblem, validateIssue, validateRental, validateReturn, type IssueDraft, type RentalDraft, type ReturnDraft } from "./tools";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
 const KEY = "prc:db:v1";
@@ -1424,4 +1426,173 @@ export function setPaymentInfo(p: PaymentInfo, by: string): Err {
     audit(d, by, "Payment details updated", `${p.bankName} · ${p.upi}`);
   });
   return err;
+}
+
+/* ───────────── Staff welfare: mess LPG, room rent, shop-staff tasks (welfare.ts) ───────────── */
+
+/** Technician or office starts a new cylinder; the one in use is marked finished on that day. */
+export function addCylinder(draft: LpgDraft, by: string, byRole: LpgCylinder["byRole"]): Err {
+  const cur = currentCylinder(getSnapshot().cylinders ?? []);
+  const err = validateLpg(draft, cur, isoDay(0));
+  if (err) return err;
+  mutate((d) => {
+    d.cylinders ??= [];
+    const open = currentCylinder(d.cylinders);
+    if (open) open.end = draft.start;
+    d.cylinders.unshift({ ...draft, no: draft.no.trim().toUpperCase(), vendor: draft.vendor.trim(), note: draft.note.trim(), id: `cyl${++d.seq}`, end: null, by, byRole, createdAt: nowIso() });
+    // the refill task for the old cylinder is done once the new one is in use
+    (d.staffTasks ?? []).forEach((t) => { if (open && t.key === `lpg:${open.id}` && t.status === "Open") Object.assign(t, { status: "Done", doneAt: nowIso(), doneBy: by, note: `New cylinder ${draft.no} started` }); });
+    audit(d, by, "LPG cylinder started", `${draft.no} · ${draft.sizeKg} kg${open ? ` · ${open.no} finished after ${daysOf(open, draft.start)} days` : ""}`);
+    if (byRole === "Technician") notify(d, "admin", "New LPG cylinder started", `${draft.no} at the mess, entered by ${by}${open ? ` · ${open.no} lasted ${daysOf(open, draft.start)} days` : ""}`);
+  });
+  return null;
+}
+
+export function finishCylinder(id: string, end: string, by: string): Err {
+  const c = (getSnapshot().cylinders ?? []).find((x) => x.id === id);
+  if (!c) return "Cylinder not found.";
+  if (!end || end < c.start || end > isoDay(0)) return "Finish date must be between the start date and today.";
+  mutate((d) => {
+    const x = d.cylinders!.find((y) => y.id === id)!;
+    x.end = end;
+    audit(d, by, "LPG cylinder finished", `${x.no} · ${daysOf(x, end)} days`);
+  });
+  return null;
+}
+
+export function updateCylinder(id: string, patch: Partial<Pick<LpgCylinder, "no" | "start" | "end" | "people" | "cost" | "vendor" | "note">>, by: string): Err {
+  const c = (getSnapshot().cylinders ?? []).find((x) => x.id === id);
+  if (!c) return "Cylinder not found.";
+  const n = { ...c, ...patch };
+  if (!n.no.trim()) return "Enter the cylinder number.";
+  if (n.end && n.end < n.start) return "Finish date cannot be before the start date.";
+  if (!(n.people >= 1)) return "Technicians covered must be at least 1.";
+  mutate((d) => {
+    Object.assign(d.cylinders!.find((y) => y.id === id)!, patch);
+    audit(d, by, "LPG cylinder edited", n.no);
+  });
+  return null;
+}
+
+export function deleteCylinder(id: string, by: string) {
+  mutate((d) => {
+    const c = (d.cylinders ?? []).find((x) => x.id === id);
+    if (!c) return;
+    d.cylinders = d.cylinders!.filter((x) => x.id !== id);
+    audit(d, by, "LPG cylinder deleted", c.no);
+  });
+}
+
+export function saveRoom(id: string | null, draft: RoomDraft, by: string): Err {
+  const err = validateRoom(draft);
+  if (err) return err;
+  mutate((d) => {
+    d.rooms ??= [];
+    const clean = { ...draft, label: draft.label.trim(), landlord: draft.landlord.trim(), note: draft.note.trim() };
+    const r = id ? d.rooms.find((x) => x.id === id) : undefined;
+    if (r) Object.assign(r, clean);
+    else d.rooms.push({ ...clean, id: `room${++d.seq}` });
+    audit(d, by, id ? "Room rent edited" : "Room rent added", `${clean.label} · ₹${clean.amount} on day ${clean.dueDay} → ${clean.assignTo}`);
+  });
+  return null;
+}
+
+/** Opens any task that is due today (rent reminder window reached, LPG nearly finished). Safe to call often. */
+export function syncStaffTasks(day = isoDay(0)) {
+  const s = getSnapshot();
+  const add = dueTasks({ rooms: s.rooms ?? [], cylinders: s.cylinders ?? [], tasks: s.staffTasks ?? [] }, day);
+  if (!add.length) return 0;
+  mutate((d) => {
+    d.staffTasks ??= [];
+    for (const t of add) {
+      d.staffTasks.unshift({ ...t, id: `task${++d.seq}`, status: "Open", createdAt: nowIso() });
+      notify(d, "admin", `Task for ${t.assignTo}: ${t.kind}`, `${t.title} — ${t.detail} · due ${fmtDate(t.due)}`);
+    }
+  });
+  return add.length;
+}
+
+export function completeTask(id: string, by: string, note = "") {
+  mutate((d) => {
+    const t = (d.staffTasks ?? []).find((x) => x.id === id);
+    if (!t || t.status === "Done") return;
+    Object.assign(t, { status: "Done", doneAt: nowIso(), doneBy: by, note: note.trim() });
+    audit(d, by, "Task done", `${t.title}${note ? ` · ${note}` : ""}`);
+  });
+}
+
+/** Staff marks the rent task done by recording the payment. */
+export function payRent(taskId: string, p: { amount: number; paidOn: string; mode: RentPayment["mode"]; ref: string }, by: string): Err {
+  const t = (getSnapshot().staffTasks ?? []).find((x) => x.id === taskId);
+  if (!t || t.kind !== "Room Rent") return "Task not found.";
+  if (!(p.amount > 0)) return "Enter the amount paid.";
+  if (!p.paidOn || p.paidOn > isoDay(0)) return "Paid date cannot be in the future.";
+  if (p.mode !== "Cash" && !p.ref.trim()) return "Enter the UPI / transaction / cheque reference.";
+  const [, roomId, month] = t.key.split(":");
+  mutate((d) => {
+    d.rentPayments ??= [];
+    d.rentPayments.unshift({ id: `rent${++d.seq}`, roomId, month, paidOn: p.paidOn, amount: p.amount, mode: p.mode, ref: p.ref.trim(), by });
+    Object.assign(d.staffTasks!.find((x) => x.id === taskId)!, { status: "Done", doneAt: nowIso(), doneBy: by, note: `Paid ₹${p.amount.toLocaleString("en-IN")} by ${p.mode}${p.ref ? ` · ${p.ref.trim()}` : ""}` });
+    audit(d, by, "Room rent paid", `${t.title} · ₹${p.amount} ${p.mode}`);
+    notify(d, "admin", "Room rent paid", `${t.title.replace("Pay room rent — ", "")} · ₹${p.amount.toLocaleString("en-IN")} ${p.mode} by ${by}`);
+  });
+  return null;
+}
+
+/* ───────────── Shop tools issue / return + rented tools (tools.ts) ───────────── */
+
+const nextNo = (list: { id: string }[], prefix: string) => `${prefix}-${String(list.reduce((m, x) => Math.max(m, Number(x.id.split("-").pop()) || 0), 0) + 1).padStart(4, "0")}`;
+
+export function issueTool(draft: IssueDraft, by: string): { id: string } | { error: string } {
+  const err = validateIssue(draft);
+  if (err) return { error: err };
+  let id = "";
+  mutate((d) => {
+    d.toolIssues ??= [];
+    id = nextNo(d.toolIssues, "TI");
+    d.toolIssues.unshift({ ...structuredClone(draft), tool: draft.tool.trim(), site: draft.site.trim(), handedBy: draft.handedBy.trim(), id, createdAt: nowIso(), createdBy: by, ret: null });
+    audit(d, by, "Tool issued", `${id} · ${draft.tool} ×${draft.qty} → ${draft.techName} · ${draft.site}`);
+    if (draft.techId) notify(d, `tech:${draft.techId}`, "Tool issued to you", `${draft.tool} ×${draft.qty} for ${draft.site} — return by ${fmtDate(draft.expectedReturn)}`);
+  });
+  return { id };
+}
+
+export function returnTool(id: string, r: ReturnDraft, by: string): Err {
+  const x = (getSnapshot().toolIssues ?? []).find((y) => y.id === id);
+  if (!x) return "Entry not found.";
+  if (x.ret) return "This tool is already returned.";
+  const err = validateReturn(x, r);
+  if (err) return err;
+  mutate((d) => {
+    const y = d.toolIssues!.find((z) => z.id === id)!;
+    y.ret = { ...structuredClone(r), receivedBy: r.receivedBy.trim(), remarks: r.remarks.trim(), resolved: false };
+    y.ret.resolved = !returnProblem(y);
+    audit(d, by, "Tool returned", `${id} · ${y.tool} · ${r.condition}${missingOf(y).length ? ` · missing ${missingOf(y).join(", ")}` : ""}`);
+    if (!y.ret.resolved) notify(d, "admin", "Tool returned with a problem", `${id} · ${y.tool} from ${y.techName}: ${r.remarks.trim()}`);
+  });
+  return null;
+}
+
+export function resolveToolIssue(id: string, by: string) {
+  mutate((d) => {
+    const y = (d.toolIssues ?? []).find((z) => z.id === id);
+    if (!y?.ret) return;
+    y.ret.resolved = true;
+    audit(d, by, "Tool problem resolved", `${id} · ${y.tool}`);
+  });
+}
+
+export function saveToolRental(id: string | null, draft: RentalDraft, by: string): Err {
+  const err = validateRental(draft);
+  if (err) return err;
+  mutate((d) => {
+    d.toolRentals ??= [];
+    const clean = { ...structuredClone(draft), tool: draft.tool.trim(), site: draft.site.trim(), vendor: draft.vendor.trim(), remarks: draft.remarks.trim() };
+    const r = id ? d.toolRentals.find((x) => x.id === id) : undefined;
+    const total = rentalCalc(clean, isoDay(0)).total;
+    if (r) Object.assign(r, clean);
+    else d.toolRentals.unshift({ ...clean, id: nextNo(d.toolRentals, "TR"), createdAt: nowIso(), createdBy: by });
+    audit(d, by, id ? "Tool rental updated" : "Tool rental added", `${clean.tool} ×${clean.qty} · ${clean.status} · ₹${total}`);
+  });
+  return null;
 }

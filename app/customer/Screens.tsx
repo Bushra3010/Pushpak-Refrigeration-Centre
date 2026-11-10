@@ -12,6 +12,7 @@ import {
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
+import { LocationDetails } from "./SiteForm";
 import { ExploreMore } from "./SpareParts";
 
 const myJobs = (db: Db, me: Customer) => db.jobs.filter((j) => j.customerId === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -314,11 +315,11 @@ export function ProfileScreen({ db, me, unread, onMenu, onLogout }: { db: Db; me
 }
 
 export function EditProfilePage({ me, onBack, onSave }: { me: Customer; onBack: () => void; onSave: (p: ProfileDraft) => void }) {
-  const [p, setP] = useState<ProfileDraft>({ name: me.name, phone: me.phone, altPhone: me.altPhone, address: me.address, area: me.area, gps: me.gps, type: me.type, contactPref: me.contactPref });
+  const [p, setP] = useState<ProfileDraft>({ name: me.name, phone: me.phone, altPhone: me.altPhone, address: me.address, area: me.area, gps: me.gps, type: me.type, contactPref: me.contactPref, property: me.property ?? {} });
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
       <PageHeader title="Edit profile" onBack={onBack} />
-      <div style={{ padding: "0 16px", flex: 1 }}><ProfileForm value={p} onChange={setP} /></div>
+      <div style={{ padding: "0 16px", flex: 1 }}><ProfileForm value={p} onChange={setP} /><div style={{ height: 1, background: "var(--line)", margin: "18px 0 0" }} /><p style={{ margin: "14px 0 0", fontSize: 16, fontWeight: 800 }}>Service Location Details</p><LocationDetails value={p.property ?? {}} onChange={(property) => setP({ ...p, property })} review /></div>
       <Footer><PrimaryButton disabled={!profileValid(p)} onClick={() => onSave(p)}>Save changes</PrimaryButton></Footer>
     </div>
   );
