@@ -10,8 +10,10 @@ import { AppHeader, Avatar, BannerCarousel, Empty, Footer, GoldTiles, Hello, Pag
 import {
   acLabel, acSummary, siteOf, daysBetween, fmtDate, fmtDateTime, initials, inr, isOpen, jobTotals, relDay, today,
   type AcUnit, type AppNotification, type Customer, type Db, type Job,
+  isoDay,
 } from "../lib/data";
 import { ProfileForm, profileValid, type ProfileDraft } from "./Onboard";
+import { compressorEnd, warrantyEnd, warrantyState } from "../lib/sales";
 import { LocationDetails } from "./SiteForm";
 import { ExploreMore } from "./SpareParts";
 
@@ -241,10 +243,28 @@ export function AcPage({ db, ac, onBack, onBook, onOpenJob, onEdit }: { db: Db; 
       <PageHeader title={`${ac.application} AC`} sub={acLabel(ac)} onBack={onBack} right={<button onClick={onEdit} aria-label="Edit AC" style={iconBtn}><EditIcon s={20} c="var(--ink)" /></button>} />
       <div style={{ padding: "0 16px", flex: 1 }}>
         <div style={{ ...card, padding: 14 }}><AcSpecs ac={ac} /></div>
+        <WarrantyCard db={db} acId={ac.id} />
         <h3 style={sectionTitle}>Service history</h3>
         <div style={{ ...card, padding: 14 }}><AcHistory db={db} ac={ac} onOpenJob={onOpenJob} /></div>
       </div>
       <Footer><PrimaryButton onClick={onBook}>Book service for this AC</PrimaryButton></Footer>
+    </div>
+  );
+}
+
+/** Asset ID, serials and warranty for an AC bought from Pushpak. */
+function WarrantyCard({ db, acId }: { db: Db; acId: string }) {
+  const x = (db.acSales ?? []).find((y) => y.acId === acId);
+  if (!x) return null;
+  const st = warrantyState(x, isoDay(0));
+  return (
+    <div style={{ ...card, padding: 14, marginTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><b style={{ fontSize: 14.5 }}>🛡️ Warranty</b><Pill tone={st === "Active" ? "green" : st === "Expired" ? "red" : "amber"}>{st}</Pill></div>
+      <p style={{ margin: "6px 0 0", fontSize: 13.5 }}>Valid till <b>{fmtDate(warrantyEnd(x))}</b>{compressorEnd(x) ? <> · compressor till <b>{fmtDate(compressorEnd(x)!)}</b></> : null}</p>
+      <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-soft)" }}>Asset ID {x.id} · Invoice {x.sale.invoiceNo} · bought {fmtDate(x.sale.date)}</p>
+      <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--ink-soft)" }}>Indoor S/N {x.unit.indoorSerial}{x.unit.outdoorSerial ? ` · Outdoor S/N ${x.unit.outdoorSerial}` : ""}</p>
+      {x.warranty.coverage.length > 0 && <p style={{ margin: "8px 0 0", fontSize: 12.5 }}><b>Covers:</b> {x.warranty.coverage.join(", ")}</p>}
+      <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ink-soft)" }}>The company replaces only the guaranteed part. Checking, handling, repair and related material charges are not included.</p>
     </div>
   );
 }

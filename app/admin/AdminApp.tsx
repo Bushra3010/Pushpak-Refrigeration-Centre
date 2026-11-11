@@ -25,12 +25,15 @@ import { ShiftingSection } from "./Shifting";
 import { SamplesSection } from "./Samples";
 import { LpgSection, RentSection, TasksPanel, TasksSection, WelfarePeriodPanel } from "./Welfare";
 import { ShopToolsSection, ToolRentalSection } from "./Tools";
+import { SalesSection } from "./Sales";
+import { SiteVisitsSection } from "./SiteVisits";
+import { warrantyState } from "../lib/sales";
 import { syncStaffTasks } from "../lib/store";
 import { needsAttention, rentalOverdue } from "../lib/tools";
 
 export type Section = "dashboard" | "jobs" | "customers" | "acs" | "technicians" | "inventory" | "quotations" | "billing" | "growth" | "reports" | "notifications" | "audit" | "settings"
   | "profit" | "techprofit" | "payroll" | "expenses" | "timesheets" | "calculators" | "costrules" | "repairs" | "promo" | "shifting" | "samples"
-  | "lpg" | "rent" | "stafftasks" | "shoptools" | "toolrent";
+  | "lpg" | "rent" | "stafftasks" | "shoptools" | "toolrent" | "sales" | "sitevisits";
 
 const NAV: { group: string; items: { id: Section; label: string; icon: string; roles: Role[] }[] }[] = [
   { group: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: "▦", roles: ["Admin", "Service Coordinator", "Accounts"] }] },
@@ -39,6 +42,8 @@ const NAV: { group: string; items: { id: Section; label: string; icon: string; r
     { id: "customers", label: "Customers", icon: "👥", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "acs", label: "AC Assets", icon: "❄️", roles: ["Admin", "Service Coordinator"] },
     { id: "technicians", label: "Technicians", icon: "🧑‍🔧", roles: ["Admin", "Service Coordinator"] },
+    { id: "sales", label: "AC Sales & Warranty", icon: "🧾", roles: ["Admin", "Service Coordinator", "Accounts"] },
+    { id: "sitevisits", label: "Site Visits", icon: "📐", roles: ["Admin", "Service Coordinator"] },
     { id: "samples", label: "Sample Enquiries", icon: "🧩", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "repairs", label: "Repair Register", icon: "🔌", roles: ["Admin", "Service Coordinator", "Accounts"] },
     { id: "shifting", label: "Shifting Inspections", icon: "🚚", roles: ["Admin", "Service Coordinator"] },
@@ -88,6 +93,8 @@ const TITLES: Record<Section, string> = {
   promo: "Spare Parts Promo — Explore More at Pushpak",
   shifting: "AC Shifting — Pre-Removal Inspections",
   samples: "Sample Enquiries — customer spare-part samples",
+  sales: "AC Sales & Warranty — from sale to warranty expiry and every service after",
+  sitevisits: "AC Site Visits — engineer reports before installation",
   lpg: "LPG Cylinder Tracking — Company Kitchen / Technician Mess",
   rent: "Room Rent — set by Admin, paid by shop staff",
   stafftasks: "Staff Tasks",
@@ -112,7 +119,7 @@ export default function AdminApp() {
 
   useEffect(() => { setAuthed(readSession()); }, []);
   // Room rent due / LPG running low → a task appears for the shop staff on its own.
-  const taskInputs = JSON.stringify([db.rooms, db.cylinders?.map((c) => [c.id, c.start, c.end])]);
+  const taskInputs = JSON.stringify([db.rooms, db.cylinders?.map((c) => [c.id, c.start, c.end]), db.acSales?.map((x) => [x.id, x.sale.date, x.warranty.years])]);
   useEffect(() => { if (authed) syncStaffTasks(); }, [authed, taskInputs]);
   useEffect(() => { window.scrollTo({ top: 0 }); }, [section]);
 
@@ -151,6 +158,8 @@ export default function AdminApp() {
     repairs: (db.repairs ?? []).filter((r) => r.status !== "Repaired" && r.status !== "Returned").length,
     promo: (db.partEnquiries ?? []).filter((e) => e.status === "New").length,
     samples: (db.samples ?? []).filter((x) => x.status !== "Closed" && x.customerDue <= today()).length,
+    sales: (db.acSales ?? []).filter((x) => x.install.status === "Pending" || warrantyState(x, today()) === "Expiring Soon").length,
+    sitevisits: (db.siteVisits ?? []).filter((v) => v.status === "Submitted").length,
     stafftasks: (db.staffTasks ?? []).filter((t) => t.status === "Open" && (role === "Admin" || t.assignTo === role)).length,
     shoptools: (db.toolIssues ?? []).filter((x) => needsAttention(x, today())).length,
     toolrent: (db.toolRentals ?? []).filter((r) => rentalOverdue(r, today())).length,
@@ -229,6 +238,8 @@ export default function AdminApp() {
             {current === "dashboard" && <div style={{ marginBottom: 16 }}><TasksPanel db={db} who={who} role={role} notify={notify} onAll={() => go("stafftasks")} /></div>}
             {current === "dashboard" && <Dashboard db={db} go={go} openJob={openJob} />}
             {current === "dashboard" && <div style={{ marginTop: 16 }}><WelfarePeriodPanel db={db} onOpen={() => go("lpg")} /></div>}
+            {current === "sales" && <SalesSection db={db} who={who} role={role} notify={notify} />}
+            {current === "sitevisits" && <SiteVisitsSection db={db} who={who} notify={notify} />}
             {current === "lpg" && <LpgSection db={db} who={who} role={role} notify={notify} go={go} />}
             {current === "rent" && <RentSection db={db} who={who} notify={notify} />}
             {current === "stafftasks" && <TasksSection db={db} who={who} role={role} notify={notify} />}

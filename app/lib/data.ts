@@ -15,6 +15,8 @@ import type { CallLog, FieldRules, ServiceCategory } from "./field";
 import type { PaymentInfo, TechProfile } from "./techprofile";
 import type { LpgCylinder, RentPayment, RentRoom, StaffTask } from "./welfare";
 import type { ToolIssue, ToolRental } from "./tools";
+import type { AcSale } from "./sales";
+import type { SiteVisit } from "./sitevisit";
 import {
   DEFAULT_FINANCE_SETTINGS, type Advance, type AttendanceMark, type Deduction, type Expense, type FinanceSettings, type Holiday,
   type Incentive, type PayrollRun, type SalaryRecord, type SavedCalc, type TimeCorrection, type TimeLog,
@@ -387,6 +389,10 @@ export interface Db {
   /** shop tools issued to technicians + tools hired from outside (tools.ts) */
   toolIssues?: ToolIssue[];
   toolRentals?: ToolRental[];
+  /** AC sales & warranty — one asset per AC sold (sales.ts) */
+  acSales?: AcSale[];
+  /** pre-installation site visit reports (sitevisit.ts) */
+  siteVisits?: SiteVisit[];
   /** true once the sample records were cleared (fresh start) */
   clean?: boolean;
   /** saved-data schema version (see upgradeDb) */

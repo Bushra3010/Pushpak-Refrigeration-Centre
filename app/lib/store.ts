@@ -24,6 +24,8 @@ import { addDays, latestSupplier, validateSample, type CustomerTemplate, type Sa
 import { approvalBlockers, needsCustomerAck, progress, submitProblems, type InspectionDraft, type ShiftingInspection } from "./shifting";
 import { currentCylinder, daysOf, dueTasks, validateLpg, validateRoom, type LpgCylinder, type LpgDraft, type RentPayment, type RoomDraft } from "./welfare";
 import { missingOf, rentalCalc, returnProblem, validateIssue, validateRental, validateReturn, type IssueDraft, type RentalDraft, type ReturnDraft } from "./tools";
+import { EXPIRY_ALERT_DAYS, duplicateSerial, validateSale, warrantyEnd, type AcSale, type SaleDraft, type WarrantyClaim } from "./sales";
+import { visitProblems, type SiteVisit, type SiteVisitDraft } from "./sitevisit";
 import { validateBanner, validateEnquiry, type BannerDraft, type EnquiryStatus, type PartEnquiry, type PromoBanner } from "./promo";
 
 const KEY = "prc:db:v1";
@@ -1501,7 +1503,7 @@ export function saveRoom(id: string | null, draft: RoomDraft, by: string): Err {
 /** Opens any task that is due today (rent reminder window reached, LPG nearly finished). Safe to call often. */
 export function syncStaffTasks(day = isoDay(0)) {
   const s = getSnapshot();
-  const add = dueTasks({ rooms: s.rooms ?? [], cylinders: s.cylinders ?? [], tasks: s.staffTasks ?? [] }, day);
+  const add = [...dueTasks({ rooms: s.rooms ?? [], cylinders: s.cylinders ?? [], tasks: s.staffTasks ?? [] }, day), ...warrantyTasks(s.acSales ?? [], s.staffTasks ?? [], day)];
   if (!add.length) return 0;
   mutate((d) => {
     d.staffTasks ??= [];
@@ -1594,6 +1596,136 @@ export function saveToolRental(id: string | null, draft: RentalDraft, by: string
     if (r) Object.assign(r, clean);
     else d.toolRentals.unshift({ ...clean, id: nextNo(d.toolRentals, "TR"), createdAt: nowIso(), createdBy: by });
     audit(d, by, id ? "Tool rental updated" : "Tool rental added", `${clean.tool} ×${clean.qty} · ${clean.status} · ₹${total}`);
+  });
+  return null;
+}
+
+/* ───────────── AC sales & warranty (sales.ts) ───────────── */
+
+/** A "call the customer" task 30 days before each warranty ends (for AMC / extended warranty). */
+function warrantyTasks(sales: AcSale[], tasks: { key: string }[], day: string) {
+  const have = new Set(tasks.map((t) => t.key));
+  return sales.filter((x) => { const end = warrantyEnd(x); return end >= day && addDays(day, EXPIRY_ALERT_DAYS) >= end && !have.has(`warranty:${x.id}`); })
+    .map((x) => ({ key: `warranty:${x.id}`, kind: "Warranty Expiry" as const, title: `Warranty ending — ${x.customer.name} (${x.id})`, detail: `${x.unit.brand} ${x.unit.capacity} ${x.unit.model} · ${x.install.location} · call ${x.customer.phone} for AMC / extended warranty`, due: warrantyEnd(x), assignTo: "Service Coordinator" as const }));
+}
+
+const acCapacity = (c: string): AcUnit["capacity"] => (c === "1 Ton" || c === "1.5 Ton" || c === "2 Ton" ? c : "Other");
+const acApplication = (room: string): AcUnit["application"] => (/bed/i.test(room) ? "Bedroom" : /hall|living/i.test(room) ? "Hall" : /office/i.test(room) ? "Office" : /shop/i.test(room) ? "Shop" : /server/i.test(room) ? "Server Room" : "Other");
+
+/** Registers the sale: one customer profile (found by mobile or created), and per AC its own Asset ID + AC record. */
+export function registerSale(draft: SaleDraft, by: string): { ids: string[] } | { error: string } {
+  const err = validateSale(draft) ?? duplicateSerial(getSnapshot().acSales ?? [], draft);
+  if (err) return { error: err };
+  const ids: string[] = [];
+  mutate((d) => {
+    d.acSales ??= [];
+    const now = nowIso();
+    const k = draft.customer;
+    let cust = d.customers.find((c) => c.id === k.customerId && !c.mergedInto) ?? d.customers.find((c) => c.phone === k.phone && !c.mergedInto);
+    if (!cust) {
+      cust = { id: `c${++d.seq}`, name: k.name.trim(), phone: k.phone, altPhone: "", address: k.address.trim(), area: k.area.trim(), gps: "", type: "Residential", status: "New", contactPref: "WhatsApp", createdAt: now, amc: null };
+      d.customers.unshift(cust);
+      audit(d, by, "Customer created", `${cust.name} · ${cust.phone} (AC sale)`);
+    }
+    let n = d.acSales.reduce((m, x) => Math.max(m, Number(x.id.split("-").pop()) || 0), 0);
+    const tech = d.techs.find((t) => t.id === draft.sale.techId);
+    for (const u of draft.units) {
+      const id = `PRC-AST-${String(++n).padStart(4, "0")}`;
+      const acId = `ac${++d.seq}`;
+      d.acs.push({ id: acId, customerId: cust.id, category: "AC", application: acApplication(u.room), acType: u.acType, capacity: acCapacity(u.capacity), brand: u.brand, model: u.model.trim(),
+        serial: [u.indoorSerial.trim(), u.outdoorSerial.trim()].filter(Boolean).join(" / "), inverter: u.inverter, ageYears: 0, installAgeYears: 0, purchased: "New", warranty: "Yes", dailyHours: 8, usage: "Regular" });
+      const rec: AcSale = {
+        id, acId, customerId: cust.id,
+        customer: { name: cust.name, phone: cust.phone, address: k.address.trim() || cust.address, area: k.area.trim() || cust.area },
+        install: { location: u.room, status: draft.sale.status, date: draft.sale.status === "Installed" ? draft.sale.installDate : "", techId: tech?.id ?? "", techName: tech?.name ?? "", report: "", pipeFt: null },
+        unit: { ...u, model: u.model.trim(), indoorSerial: u.indoorSerial.trim().toUpperCase(), outdoorSerial: u.outdoorSerial.trim().toUpperCase() },
+        sale: { date: draft.sale.date, invoiceNo: draft.sale.invoiceNo.trim() },
+        warranty: structuredClone(draft.warranty), docs: structuredClone(draft.docs), vendor: structuredClone(draft.vendor), claims: [], createdAt: now, createdBy: by,
+      };
+      d.acSales.unshift(rec);
+      ids.push(id);
+      audit(d, by, "AC sale registered", `${id} · ${u.brand} ${u.capacity} ${u.model} · ${cust.name}`);
+      notify(d, `customer:${cust.id}`, "AC warranty registered", `${u.brand} ${u.capacity} (${u.room}) · Asset ${id} · warranty till ${fmtDate(warrantyEnd(rec))}`);
+      if (tech && draft.sale.status === "Pending") notify(d, `tech:${tech.id}`, "AC installation assigned", `${id} · ${u.brand} ${u.capacity} at ${cust.name}, ${rec.customer.address}`);
+    }
+  });
+  return { ids };
+}
+
+/** Edits a sale record. Vendor details can only be changed by Admin. */
+export function updateSale(id: string, patch: Partial<Pick<AcSale, "customer" | "unit" | "sale" | "warranty" | "docs" | "vendor" | "install">>, by: string, isAdmin: boolean): Err {
+  const x = (getSnapshot().acSales ?? []).find((y) => y.id === id);
+  if (!x) return "Record not found.";
+  if (patch.vendor && !isAdmin) return "Only Admin can change vendor details.";
+  if (patch.unit && (!patch.unit.indoorSerial.trim() || (patch.unit.acType !== "Window" && !patch.unit.outdoorSerial.trim()))) return "Indoor and outdoor serial numbers are required.";
+  if (patch.install?.status === "Installed" && !patch.install.date) return "Enter the installation date.";
+  mutate((d) => {
+    const y = d.acSales!.find((z) => z.id === id)!;
+    Object.assign(y, structuredClone(patch));
+    const ac = d.acs.find((a) => a.id === y.acId);
+    if (ac && patch.unit) Object.assign(ac, { brand: y.unit.brand, model: y.unit.model, acType: y.unit.acType, capacity: acCapacity(y.unit.capacity), serial: [y.unit.indoorSerial, y.unit.outdoorSerial].filter(Boolean).join(" / ") });
+    if (patch.install?.status === "Installed" && x.install.status !== "Installed") {
+      y.install.reportAt = nowIso();
+      notify(d, `customer:${y.customerId}`, "AC installed", `${y.unit.brand} ${y.unit.capacity} · ${y.install.location} · Asset ${y.id}`);
+    }
+    audit(d, by, "AC sale updated", `${id} · ${Object.keys(patch).join(", ")}`);
+  });
+  return null;
+}
+
+export function saveClaim(saleId: string, c: Omit<WarrantyClaim, "id" | "by" | "updatedAt"> & { id?: string }, by: string): Err {
+  const x = (getSnapshot().acSales ?? []).find((y) => y.id === saleId);
+  if (!x) return "Record not found.";
+  if (!c.issue.trim()) return "Describe the problem.";
+  if (!c.date) return "Pick the claim date.";
+  if (Object.values(c.charges).some((n) => !(n >= 0))) return "Charges cannot be negative.";
+  mutate((d) => {
+    const y = d.acSales!.find((z) => z.id === saleId)!;
+    const old = c.id ? y.claims.find((z) => z.id === c.id) : undefined;
+    if (old) Object.assign(old, { ...c, by, updatedAt: nowIso() });
+    else y.claims.unshift({ ...c, id: `CLM-${String(y.claims.length + 1).padStart(2, "0")}`, by, updatedAt: nowIso() });
+    audit(d, by, old ? "Warranty claim updated" : "Warranty claim raised", `${saleId} · ${c.part || c.issue} · ${c.status}`);
+    notify(d, `customer:${y.customerId}`, `Warranty claim · ${c.status}`, `${y.unit.brand} ${y.unit.capacity} (${y.id}) — ${c.part || c.issue}`);
+  });
+  return null;
+}
+
+/* ───────────── AC site visit reports (sitevisit.ts) ───────────── */
+
+export function saveSiteVisit(id: string | null, techId: string, draft: SiteVisitDraft): { id: string } {
+  let out = id ?? "";
+  mutate((d) => {
+    d.siteVisits ??= [];
+    const v = id ? d.siteVisits.find((x) => x.id === id) : undefined;
+    if (v) { Object.assign(v, structuredClone(draft)); return; }
+    out = `SV-${String(d.siteVisits.reduce((m, x) => Math.max(m, Number(x.id.split("-").pop()) || 0), 0) + 1).padStart(4, "0")}`;
+    d.siteVisits.unshift({ ...structuredClone(draft), id: out, techId, techName: techName(d, techId), status: "Draft", office: null, createdAt: nowIso() });
+  });
+  return { id: out };
+}
+
+export function submitSiteVisit(id: string, draft: SiteVisitDraft): string[] {
+  const p = visitProblems(draft);
+  if (p.length) return p;
+  mutate((d) => {
+    const v = (d.siteVisits ?? []).find((x) => x.id === id);
+    if (!v) return;
+    Object.assign(v, structuredClone(draft), { status: "Submitted", submittedAt: nowIso() });
+    notify(d, "admin", "Site visit report submitted", `${id} · ${v.customer.name} · ${v.techName}${(v.pipeFt ?? 0) > v.standardFt ? ` · extra pipe ${(v.pipeFt ?? 0) - v.standardFt} ft` : ""}`);
+    audit(d, v.techName, "Site visit submitted", `${id} · ${v.customer.name}`);
+  });
+  return [];
+}
+
+export function reviewSiteVisit(id: string, ok: boolean, notes: string, by: string): Err {
+  if (!ok && !notes.trim()) return "Write what the technician must correct.";
+  mutate((d) => {
+    const v = (d.siteVisits ?? []).find((x) => x.id === id);
+    if (!v) return;
+    v.status = ok ? "Reviewed" : "Correction Required";
+    v.office = { notes: notes.trim(), by, at: nowIso() };
+    notify(d, `tech:${v.techId}`, ok ? "Site visit reviewed" : "Site visit needs correction", `${id} · ${v.customer.name}${notes.trim() ? ` — ${notes.trim()}` : ""}`);
+    audit(d, by, ok ? "Site visit reviewed" : "Site visit sent back", `${id}${notes ? ` · ${notes}` : ""}`);
   });
   return null;
 }
