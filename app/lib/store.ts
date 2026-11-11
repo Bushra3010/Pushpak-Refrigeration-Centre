@@ -1460,10 +1460,11 @@ export function finishCylinder(id: string, end: string, by: string): Err {
   return null;
 }
 
-export function updateCylinder(id: string, patch: Partial<Pick<LpgCylinder, "no" | "start" | "end" | "people" | "cost" | "vendor" | "note">>, by: string): Err {
+export function updateCylinder(id: string, patch: Partial<Pick<LpgCylinder, "no" | "start" | "end" | "people" | "meals" | "cost" | "vendor" | "note">>, by: string): Err {
   const c = (getSnapshot().cylinders ?? []).find((x) => x.id === id);
   if (!c) return "Cylinder not found.";
   const n = { ...c, ...patch };
+  if (n.meals != null && !(n.meals >= 1 && n.meals <= 4)) return "Meals per day must be 1–4.";
   if (!n.no.trim()) return "Enter the cylinder number.";
   if (n.end && n.end < n.start) return "Finish date cannot be before the start date.";
   if (!(n.people >= 1)) return "Technicians covered must be at least 1.";

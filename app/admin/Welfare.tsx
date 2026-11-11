@@ -4,7 +4,8 @@ import { useState } from "react";
 import { CurrentCylinder, LpgForm, UsageSummary, cylinderSummary } from "../components/Lpg";
 import { fmtDate, inr, isoDay, type Db } from "../lib/data";
 import { addCylinder, completeTask, deleteCylinder, finishCylinder, payRent, saveRoom, updateCylinder } from "../lib/store";
-import { CYLINDER_KIND, RENT_MODES, STAFF_ROLES, daysOf, emptyRoom, finishedCylinders, rentDueDate, type LpgCylinder, type RentRoom, type RoomDraft, type StaffTask } from "../lib/welfare";
+import { CYLINDER_KIND, PERIODS, RENT_MODES, welfareSummary, type PeriodId, STAFF_ROLES, daysOf, emptyRoom, finishedCylinders, rentDueDate, type LpgCylinder, type RentRoom, type RoomDraft, type StaffTask } from "../lib/welfare";
+import { addDays as addDaysIso } from "../lib/samples";
 import { Badge, Btn, Filter, Modal, Panel, Stat, Table, fieldLabel, input, muted } from "./kit";
 import type { Role } from "./System";
 
@@ -13,7 +14,7 @@ import type { Role } from "./System";
 
 /* ───────────── LPG cylinder tracking ───────────── */
 
-export function LpgSection({ db, who, notify }: { db: Db; who: string; notify: (m: string) => void }) {
+export function LpgSection({ db, who, role, notify, go }: { db: Db; who: string; role: Role; notify: (m: string) => void; go: (s: "rent" | "stafftasks") => void }) {
   const [adding, setAdding] = useState(false);
   const [edit, setEdit] = useState<LpgCylinder | null>(null);
   const s = cylinderSummary(db);
@@ -24,10 +25,10 @@ export function LpgSection({ db, who, notify }: { db: Db; who: string; notify: (
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="admin-grid-4">
-        <Stat label="Technicians (in-house)" value={String(inHouse)} sub={`${s.current?.people ?? "—"} on the current cylinder`} tone="blue" />
+        <Stat label="Technicians (in-house)" value={String(s.current?.people ?? inHouse)} sub={s.last ? `last cylinder: ${daysOf(s.last, t0)} days · ${s.last.people} people` : "eating at the mess"} tone="blue" />
         <Stat label="Cylinder size" value={s.current ? `${s.current.sizeKg} kg` : "—"} sub={s.current ? CYLINDER_KIND[s.current.sizeKg] : "no cylinder in use"} tone="red" />
         <Stat label="Avg. usage" value={s.min === s.max ? `${s.avg} days` : `${s.min}–${s.max} days`} sub="per cylinder" tone="green" />
-        <Stat label="Per cylinder coverage" value={s.peopleMin === s.peopleMax ? `${s.peopleMax || "—"} technicians` : `${s.peopleMin}–${s.peopleMax} technicians`} sub="2 meals / day" tone="purple" />
+        <Stat label="Per cylinder coverage" value={s.peopleMin === s.peopleMax ? `${s.peopleMax || "—"} technicians` : `${s.peopleMin}–${s.peopleMax} technicians`} sub={`${s.current?.meals ?? 2} meals / day`} tone="purple" />
       </div>
 
       <div className="admin-grid-2">
@@ -37,14 +38,18 @@ export function LpgSection({ db, who, notify }: { db: Db; who: string; notify: (
         <Panel title="📊 Usage summary"><UsageSummary db={db} /></Panel>
       </div>
 
+      <WelfarePeriodPanel db={db} />
+      <RentStatusPanel db={db} who={who} role={role} notify={notify} go={go} />
+
       <div className="admin-grid-2">
         <Panel title="🕘 Cylinder history" pad={false}>
           <Table<LpgCylinder> rowKey={(c) => c.id} rows={history} empty="No finished cylinders yet." cols={[
+            { key: "n", head: "#", render: (c) => history.indexOf(c) + 1 },
             { key: "no", head: "Cylinder no.", render: (c) => <b>{c.no}</b> },
             { key: "start", head: "Start", render: (c) => fmtDate(c.start) },
             { key: "end", head: "End", render: (c) => fmtDate(c.end!) },
             { key: "days", head: "Days", align: "center", render: (c) => daysOf(c, t0) },
-            { key: "people", head: "Technicians", align: "center", render: (c) => c.people },
+            { key: "people", head: "Technicians", align: "center", render: (c) => <span>{c.people}<div style={muted}>{c.meals ?? 2} meals/day</div></span> },
             { key: "cost", head: "Cost", render: (c) => (c.cost == null ? "—" : inr(c.cost)) },
             { key: "by", head: "Entered by", render: (c) => <span>{c.by}<div style={muted}>{c.byRole === "Admin" ? "Office" : "Technician app"}</div></span> },
             { key: "a", head: "", render: (c) => <Btn small kind="ghost" onClick={() => setEdit(c)}>Edit</Btn> },
@@ -79,11 +84,12 @@ function EditCylinder({ c, who, notify, onClose }: { c: LpgCylinder; who: string
     <Modal title={`Edit ${c.no}`} onClose={onClose} width={520} footer={<>
       <Btn kind="danger" onClick={() => { if (confirm(`Delete ${c.no}?`)) { deleteCylinder(c.id, who); notify(`${c.no} deleted`); onClose(); } }}>Delete</Btn>
       <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
-      <Btn onClick={() => { const e = updateCylinder(c.id, { no: x.no, start: x.start, end: x.end, people: x.people, cost: x.cost, vendor: x.vendor, note: x.note }, who); setErr(e); if (!e) { notify("Saved"); onClose(); } }}>Save</Btn>
+      <Btn onClick={() => { const e = updateCylinder(c.id, { no: x.no, start: x.start, end: x.end, people: x.people, meals: x.meals, cost: x.cost, vendor: x.vendor, note: x.note }, who); setErr(e); if (!e) { notify("Saved"); onClose(); } }}>Save</Btn>
     </>}>
       <div className="form-grid">
         <label><span style={fieldLabel}>Cylinder no.</span><input value={x.no} onChange={(e) => set({ no: e.target.value })} style={input} /></label>
         <label><span style={fieldLabel}>Technicians</span><input type="number" value={x.people} onChange={(e) => set({ people: Number(e.target.value) })} style={input} /></label>
+        <label><span style={fieldLabel}>Meals per day</span><select value={x.meals ?? 2} onChange={(e) => set({ meals: Number(e.target.value) })} style={input}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
         <label><span style={fieldLabel}>Start</span><input type="date" value={x.start} onChange={(e) => set({ start: e.target.value })} style={input} /></label>
         <label><span style={fieldLabel}>End</span><input type="date" value={x.end ?? ""} onChange={(e) => set({ end: e.target.value || null })} style={input} /></label>
         <label><span style={fieldLabel}>Cost (₹)</span><input type="number" value={x.cost ?? ""} onChange={(e) => set({ cost: e.target.value === "" ? null : Number(e.target.value) })} style={input} /></label>
@@ -222,6 +228,58 @@ export function TasksPanel({ db, who, role, notify, onAll }: { db: Db; who: stri
   return (
     <Panel title={`📌 ${role === "Admin" ? "Shop-staff tasks" : "My tasks"} (${open.length})`} actions={<Btn small kind="ghost" onClick={onAll}>Open Staff Tasks</Btn>} pad={false}>
       <TaskTable rows={open.slice(0, 5)} onDo={(t) => (t.kind === "Room Rent" ? setPay(t) : (completeTask(t.id, who), notify("Task done")))} />
+      {pay && <PayRentModal task={pay} db={db} who={who} notify={notify} onClose={() => setPay(null)} />}
+    </Panel>
+  );
+}
+
+/* ───────────── 3 / 6 / 12-month summary (LPG page + Dashboard) ───────────── */
+
+export function WelfarePeriodPanel({ db, onOpen }: { db: Db; onOpen?: () => void }) {
+  const [p, setP] = useState<PeriodId>("3 Months");
+  const months = PERIODS.find((x) => x.id === p)!.months;
+  const w = welfareSummary(db, months, isoDay(0));
+  const tile = (k: string, v: string, sub: string) => (
+    <div style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: "12px 12px" }}>
+      <p style={{ margin: 0, fontSize: 11.5, color: "var(--ink-soft)", fontWeight: 600 }}>{k}</p>
+      <p style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800 }}>{v}</p>
+      <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "var(--ink-mute)" }}>{sub}</p>
+    </div>
+  );
+  return (
+    <Panel title="🏠 Staff welfare summary" actions={<>{onOpen && <Btn small kind="ghost" onClick={onOpen}>LPG tracking</Btn>}<Filter options={PERIODS.map((x) => x.id) as PeriodId[]} value={p} onChange={setP} /></>}>
+      <p style={{ ...muted, margin: "0 0 10px" }}>{PERIODS.find((x) => x.id === p)!.label} · from {fmtDate(w.from)} · calculated automatically</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        {tile("LPG cylinders used", String(w.cylinders), w.avgDays ? `avg ${w.avgDays} days each` : "average after 1 finished cylinder")}
+        {tile("Technicians at mess", w.avgPeople ? String(w.avgPeople) : "—", "average per cylinder")}
+        {tile("LPG cost", inr(w.lpgCost), w.perTechMonth != null ? `${inr(w.perTechMonth)} / technician / month` : "add cost on each cylinder")}
+        {tile("Room rent paid", inr(w.rentPaid), `${w.rentPayments} payment${w.rentPayments === 1 ? "" : "s"}`)}
+        {tile("Tool rental cost", inr(w.toolCost), `${w.toolRentals} rental${w.toolRentals === 1 ? "" : "s"}`)}
+        {tile("Total welfare & facilities", inr(w.total), "LPG + room rent + tool rental")}
+      </div>
+    </Panel>
+  );
+}
+
+/** This month's room rent status + open rent tasks, on the LPG / welfare page. */
+function RentStatusPanel({ db, who, role, notify, go }: { db: Db; who: string; role: Role; notify: (m: string) => void; go: (s: "rent" | "stafftasks") => void }) {
+  const [pay, setPay] = useState<StaffTask | null>(null);
+  const t0 = isoDay(0), month = t0.slice(0, 7);
+  const rooms = (db.rooms ?? []).filter((r) => r.active);
+  const tasks = (db.staffTasks ?? []).filter((t) => t.kind === "Room Rent" && t.status === "Open" && mineFor(role)(t));
+  return (
+    <Panel title="🏠 Room rent — this month" actions={<>{role === "Admin" && <Btn small kind="ghost" onClick={() => go("rent")}>Manage rooms</Btn>}<Btn small kind="ghost" onClick={() => go("stafftasks")}>Staff tasks</Btn></>} pad={false}>
+      <Table<RentRoom> rowKey={(r) => r.id} rows={rooms} empty={role === "Admin" ? "No rooms yet — add them in Room Rent." : "No room rent set up."} cols={[
+        { key: "room", head: "Room", render: (r) => <div><b>{r.label}</b><div style={muted}>{r.landlord}</div></div> },
+        { key: "amt", head: "Rent", render: (r) => inr(r.amount) },
+        { key: "due", head: "Due", render: (r) => fmtDate(rentDueDate(r, month)) },
+        { key: "to", head: "Task for", render: (r) => r.assignTo },
+        { key: "s", head: "Status", render: (r) => {
+          const paid = (db.rentPayments ?? []).find((p) => p.roomId === r.id && p.month === month);
+          const task = tasks.find((t) => t.key === `rent:${r.id}:${month}`);
+          return paid ? <Badge tone="green">Paid {fmtDate(paid.paidOn)}</Badge> : task ? <Btn small onClick={() => setPay(task)}>Mark paid</Btn> : <Badge tone="grey">Task opens {fmtDate(addDaysIso(rentDueDate(r, month), -r.remindBefore))}</Badge>;
+        } },
+      ]} />
       {pay && <PayRentModal task={pay} db={db} who={who} notify={notify} onClose={() => setPay(null)} />}
     </Panel>
   );

@@ -70,3 +70,16 @@ describe("Service location details", () => {
       .toBe("Shop / Showroom · 1st Floor · Congested Commercial Area (No parking nearby)");
   });
 });
+
+describe("Welfare period summary", () => {
+  it("adds LPG, rent and tool rental cost for the chosen period", async () => {
+    const { welfareSummary } = await import("../app/lib/welfare");
+    const w = welfareSummary({
+      cylinders: [cyl("c3", "2026-11-02", null), cyl("c2", "2026-10-02", "2026-11-02"), cyl("c1", "2026-03-01", "2026-04-01")],
+      rentPayments: [{ id: "p", roomId: "r1", month: "2026-11", paidOn: "2026-11-05", amount: 8000, mode: "UPI", ref: "x", by: "a" }],
+      toolRentals: [],
+    }, 3, "2026-11-11");
+    expect(w).toMatchObject({ cylinders: 2, avgDays: 31, avgPeople: 6, lpgCost: 1800, rentPaid: 8000, total: 9800, perTechMonth: 100 });
+    expect(welfareSummary({ cylinders: [cyl("c1", "2026-03-01", "2026-04-01")] }, 12, "2026-11-11").cylinders).toBe(1);
+  });
+});

@@ -2,6 +2,7 @@
  * those two feed automatically (rent due on a fixed date, LPG about to run out). */
 
 import { addDays } from "./samples";
+import { rentalCalc, type ToolRental } from "./tools";
 
 export const CYLINDER_SIZES = ["14.2", "19", "5"] as const;
 export const CYLINDER_KIND: Record<(typeof CYLINDER_SIZES)[number], string> = { "14.2": "Domestic", "19": "Commercial", "5": "Small (FTL)" };
@@ -17,6 +18,7 @@ export interface LpgCylinder {
   start: string; // ISO day
   end: string | null; // ISO day once finished
   people: number; // technicians eating at the mess
+  meals?: number; // meals cooked per day (default 2)
   cost: number | null;
   vendor: string;
   note: string;
@@ -25,7 +27,7 @@ export interface LpgCylinder {
   createdAt: string;
 }
 
-export interface LpgDraft { no: string; sizeKg: LpgCylinder["sizeKg"]; start: string; people: number; cost: number | null; vendor: string; note: string }
+export interface LpgDraft { no: string; sizeKg: LpgCylinder["sizeKg"]; start: string; people: number; meals: number; cost: number | null; vendor: string; note: string }
 
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(b.slice(0, 10)) - Date.parse(a.slice(0, 10))) / 86_400_000);
 
@@ -34,6 +36,7 @@ export function validateLpg(d: LpgDraft, current: LpgCylinder | undefined, today
   if (!d.start) return "Pick the start date.";
   if (d.start > today) return "Start date cannot be in the future.";
   if (!(d.people >= 1 && d.people <= 50)) return "Technicians covered must be between 1 and 50.";
+  if (!(d.meals >= 1 && d.meals <= 4)) return "Meals per day must be 1–4.";
   if (d.cost != null && d.cost < 0) return "Cost cannot be negative.";
   if (current && d.start < current.start) return `The current cylinder ${current.no} started on ${current.start} — the new one must start on or after that day.`;
   return null;
@@ -59,6 +62,7 @@ export function lpgStats(list: LpgCylinder[], today: string) {
     perMonth: Math.round((30 / avg) * 10) / 10, perYearMin: Math.floor(365 / max), perYearMax: Math.ceil(365 / min),
     peopleMin: peopleList.length ? Math.min(...peopleList) : cur?.people ?? 0, peopleMax: peopleList.length ? Math.max(...peopleList) : cur?.people ?? 0,
     spentThisYear: costs.reduce((s, n) => s + n, 0),
+    last: finishedCylinders(list)[0] ?? null,
   };
 }
 
@@ -132,4 +136,31 @@ export function dueTasks(input: { rooms: RentRoom[]; cylinders: LpgCylinder[]; t
     out.push({ key: `lpg:${s.current.id}`, kind: "LPG Refill", title: "Book the next LPG cylinder for the mess", detail: `${s.current.no} has about ${s.balance} day${s.balance === 1 ? "" : "s"} left (started ${s.current.start}).`, due: s.expectedEnd!, assignTo: "Service Coordinator" });
   }
   return out;
+}
+
+/* ───────────── Period summary (Dashboard: 3 / 6 / 12 months) ───────────── */
+
+export const PERIODS = [{ id: "3 Months", label: "Last 3 months (quarter)", months: 3 }, { id: "6 Months", label: "Last 6 months", months: 6 }, { id: "1 Year", label: "Last 12 months", months: 12 }] as const;
+export type PeriodId = (typeof PERIODS)[number]["id"];
+
+export function welfareSummary(db: { cylinders?: LpgCylinder[]; rentPayments?: RentPayment[]; rooms?: RentRoom[]; toolRentals?: ToolRental[] }, months: number, today: string) {
+  const d = new Date(`${today}T12:00:00`);
+  d.setMonth(d.getMonth() - months);
+  const from = d.toISOString().slice(0, 10);
+  const cyl = (db.cylinders ?? []).filter((c) => c.start >= from && c.start <= today);
+  const finished = cyl.filter((c) => c.end);
+  const days = finished.map((c) => daysOf(c, today));
+  const lpgCost = cyl.reduce((s, c) => s + (c.cost ?? 0), 0);
+  const avgPeople = cyl.length ? Math.round(cyl.reduce((s, c) => s + c.people, 0) / cyl.length) : 0;
+  const rent = (db.rentPayments ?? []).filter((p) => p.paidOn >= from && p.paidOn <= today);
+  const rentPaid = rent.reduce((s, p) => s + p.amount, 0);
+  const tools = (db.toolRentals ?? []).filter((r) => r.hireDate >= from && r.hireDate <= today);
+  const toolCost = tools.reduce((s, r) => s + rentalCalc(r, today).total, 0);
+  const total = lpgCost + rentPaid + toolCost;
+  return {
+    from, cylinders: cyl.length, finished: finished.length,
+    avgDays: days.length ? Math.round(days.reduce((s, n) => s + n, 0) / days.length) : null,
+    avgPeople, lpgCost, rentPaid, rentPayments: rent.length, toolCost, toolRentals: tools.length, total,
+    perTechMonth: avgPeople ? Math.round(lpgCost / avgPeople / months) : null,
+  };
 }

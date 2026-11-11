@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { fmtDate, inr, isoDay, type Db } from "../lib/data";
-import { CYLINDER_KIND, CYLINDER_SIZES, LPG_ALERT_DAYS, currentCylinder, lpgStats, nextCylinderNo, type LpgDraft } from "../lib/welfare";
+import { CYLINDER_KIND, CYLINDER_SIZES, LPG_ALERT_DAYS, currentCylinder, daysOf, lpgStats, nextCylinderNo, type LpgDraft } from "../lib/welfare";
 
 /* Mess LPG cylinder — shared by Admin → LPG Cylinder Tracking and the technician app's "Mess LPG" screen. */
 
@@ -39,6 +39,7 @@ export function CurrentCylinder({ db, compact }: { db: Db; compact?: boolean }) 
       <div style={{ flex: "1 1 200px", minWidth: 0 }}>
         {row("Cylinder no.", c.no)}
         {row("Size", `${c.sizeKg} kg (${CYLINDER_KIND[c.sizeKg]})`)}
+        {row("Shared by", `${c.people} technicians · ${c.meals ?? 2} meals/day`)}
         {row("Start date", fmtDate(c.start))}
         {row("Expected end", fmtDate(s.expectedEnd!))}
         {row("Days used", `${s.used} day${s.used === 1 ? "" : "s"}`)}
@@ -55,7 +56,8 @@ export function CurrentCylinder({ db, compact }: { db: Db; compact?: boolean }) 
 export function UsageSummary({ db }: { db: Db }) {
   const s = cylinderSummary(db);
   const rows: [string, string, string][] = [
-    ["📅", "Avg. days per cylinder", s.min === s.max ? `${s.avg} days` : `${s.min}–${s.max} days (avg ${s.avg})`],
+    ["⏮️", "Last cylinder", s.last ? `${s.last.no} · ${daysOf(s.last, isoDay(0))} days · ${s.last.people} technicians` : "—"],
+    ["📅", "Avg. days per cylinder (auto)", s.min === s.max ? `${s.avg} days` : `${s.min}–${s.max} days (avg ${s.avg})`],
     ["👥", "Technicians covered", s.peopleMin === s.peopleMax ? String(s.peopleMax || "—") : `${s.peopleMin}–${s.peopleMax}`],
     ["🔥", "Cylinders per month (est.)", String(s.perMonth)],
     ["🗓️", "Cylinders per year (est.)", s.perYearMin === s.perYearMax ? String(s.perYearMin) : `${s.perYearMin}–${s.perYearMax}`],
@@ -79,23 +81,23 @@ export function LpgForm({ db, inp, lab, onSave, onCancel, showCost = true }: {
 }) {
   const list = db.cylinders ?? [];
   const cur = currentCylinder(list);
-  const [d, setD] = useState<LpgDraft>({ no: nextCylinderNo(list), sizeKg: cur?.sizeKg ?? "14.2", start: isoDay(0), people: cur?.people ?? (db.techs.filter((t) => t.active).length || 1), cost: null, vendor: cur?.vendor ?? "", note: "" });
+  const [d, setD] = useState<LpgDraft>({ no: nextCylinderNo(list), sizeKg: cur?.sizeKg ?? "14.2", start: isoDay(0), people: cur?.people ?? (db.techs.filter((t) => t.active).length || 1), meals: cur?.meals ?? 2, cost: null, vendor: cur?.vendor ?? "", note: "" });
   const [err, setErr] = useState<string | null>(null);
   const set = (x: Partial<LpgDraft>) => { setD({ ...d, ...x }); setErr(null); };
   return (
     <form onSubmit={(e) => { e.preventDefault(); setErr(onSave(d)); }} style={{ display: "grid", gap: 12 }}>
       {cur && <p style={{ margin: 0, fontSize: 12.5, color: "var(--gold-dark)", background: "var(--gold-tint)", borderRadius: 10, padding: "8px 10px", fontWeight: 600 }}>{cur.no} (started {fmtDate(cur.start)}) will be marked finished on the start date below.</p>}
       <div className="form-grid">
-        <label><span style={lab}>Cylinder no. *</span><input value={d.no} onChange={(e) => set({ no: e.target.value })} style={inp} /></label>
+        <div><span style={lab}>Cylinder no. (auto)</span><div style={{ ...inp, display: "flex", alignItems: "center", fontWeight: 700, background: "var(--bg-secondary)" }}>{d.no}</div></div>
         <label><span style={lab}>Start date *</span><input type="date" max={isoDay(0)} value={d.start} onChange={(e) => set({ start: e.target.value })} style={inp} /></label>
         <label><span style={lab}>Cylinder size</span>
           <select value={d.sizeKg} onChange={(e) => set({ sizeKg: e.target.value as LpgDraft["sizeKg"] })} style={inp}>{CYLINDER_SIZES.map((s) => <option key={s} value={s}>{s} kg — {CYLINDER_KIND[s]}</option>)}</select>
         </label>
         <label><span style={lab}>Technicians eating at the mess *</span><input type="number" inputMode="numeric" min={1} value={d.people || ""} onChange={(e) => set({ people: Number(e.target.value) })} style={inp} /></label>
+        <label><span style={lab}>Meals per day *</span><select value={d.meals} onChange={(e) => set({ meals: Number(e.target.value) })} style={inp}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n} meal{n === 1 ? "" : "s"} / day</option>)}</select></label>
         {showCost && <label><span style={lab}>Cost (₹)</span><input type="number" inputMode="numeric" min={0} value={d.cost ?? ""} onChange={(e) => set({ cost: e.target.value === "" ? null : Number(e.target.value) })} placeholder="e.g. 905" style={inp} /></label>}
-        <label><span style={lab}>Gas agency / vendor</span><input value={d.vendor} onChange={(e) => set({ vendor: e.target.value })} style={inp} /></label>
+        <label><span style={lab}>Gas agency</span><input value={d.vendor} onChange={(e) => set({ vendor: e.target.value })} style={inp} /></label>
       </div>
-      <label><span style={lab}>Note</span><input value={d.note} onChange={(e) => set({ note: e.target.value })} placeholder="e.g. delivered by Indane, seal OK" style={inp} /></label>
       {err && <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         {onCancel && <button type="button" onClick={onCancel} style={{ ...btnBase, background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--line-strong)" }}>Cancel</button>}

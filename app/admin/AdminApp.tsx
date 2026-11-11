@@ -23,7 +23,7 @@ import { RepairsSection } from "./Repairs";
 import { PromoSection } from "./Promo";
 import { ShiftingSection } from "./Shifting";
 import { SamplesSection } from "./Samples";
-import { LpgSection, RentSection, TasksPanel, TasksSection } from "./Welfare";
+import { LpgSection, RentSection, TasksPanel, TasksSection, WelfarePeriodPanel } from "./Welfare";
 import { ShopToolsSection, ToolRentalSection } from "./Tools";
 import { syncStaffTasks } from "../lib/store";
 import { needsAttention, rentalOverdue } from "../lib/tools";
@@ -228,7 +228,8 @@ export default function AdminApp() {
 
             {current === "dashboard" && <div style={{ marginBottom: 16 }}><TasksPanel db={db} who={who} role={role} notify={notify} onAll={() => go("stafftasks")} /></div>}
             {current === "dashboard" && <Dashboard db={db} go={go} openJob={openJob} />}
-            {current === "lpg" && <LpgSection db={db} who={who} notify={notify} />}
+            {current === "dashboard" && <div style={{ marginTop: 16 }}><WelfarePeriodPanel db={db} onOpen={() => go("lpg")} /></div>}
+            {current === "lpg" && <LpgSection db={db} who={who} role={role} notify={notify} go={go} />}
             {current === "rent" && <RentSection db={db} who={who} notify={notify} />}
             {current === "stafftasks" && <TasksSection db={db} who={who} role={role} notify={notify} />}
             {current === "shoptools" && <ShopToolsSection db={db} who={who} notify={notify} />}
