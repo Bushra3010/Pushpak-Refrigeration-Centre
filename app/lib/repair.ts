@@ -146,6 +146,8 @@ export interface RepairEntry {
   timeline: RepairEvent[];
   /** Technician Repair Update */
   work?: RepairWork;
+  /** After "Repaired": testing → independent verification → physical shop return */
+  qc?: RepairQc;
 }
 
 export const EMPTY_PCB: PcbDetails = { appliance: "AC", acType: "Split AC", capacity: "1.5 Ton", tech: "Inverter", pcbType: "Indoor PCB", accessories: {} };
@@ -231,4 +233,40 @@ export function seedRepairs(today: (offset: number) => string, now: string): Rep
       timeline: [{ at: now, status: "Received", by: "Shop Staff" }],
     },
   ];
+}
+
+/* ───────────── After repair: testing → independent verification → shop return ───────────── */
+
+/** Bench tests by item type. */
+export const TEST_CHECKS: Record<RepairItemType, readonly string[]> = {
+  "PCB Board": ["Power ON / display working", "Output voltages OK", "Relays & sensors responding", "Load / running test done", "No heating or burning smell"],
+  Stabilizer: ["Input / output voltage OK", "Cut-off & time delay working", "Relay switching OK", "Load test done", "Display / indicators working"],
+  "Indoor Coil": ["Pressure test passed (no leak)", "Vacuum held", "Fins & U-bends OK", "Drain path clear"],
+  Other: ["Basic function test passed", "No heating / noise", "Load test done"],
+};
+export const VERIFY_CHECKS = ["Test result re-checked and confirmed", "Physical condition OK — no new damage", "All received accessories present", "Repair ID tag / label attached", "Packed and ready to hand over"] as const;
+export const RETURN_TO = ["Customer (walk-in)", "Technician — for fitting at site", "Courier / delivery"] as const;
+export const PAY_MODES = ["Cash", "UPI", "Card", "Bank Transfer", "Pending / Credit", "No charge (warranty)"] as const;
+
+export interface RepairQc {
+  test?: { by: string; date: string; checks: string[]; minutes: number | null; result: "Pass" | "Fail"; remarks: string; at: string };
+  verify?: { by: string; date: string; checks: string[]; result: "Approved" | "Rejected"; remarks: string; at: string };
+  outward?: { to: (typeof RETURN_TO)[number]; receivedBy: string; receivedPhone: string; handedBy: string; date: string; accessories: string[]; charge: number | null; payMode: (typeof PAY_MODES)[number]; remarks: string; at: string };
+}
+
+export type QcStage = "Testing" | "Verification" | "Ready for Return" | "Returned";
+/** Where a repaired item is in the after-repair flow (null while still being repaired). */
+export function qcStage(r: Pick<RepairEntry, "status" | "qc">): QcStage | null {
+  if (r.status === "Returned") return "Returned";
+  if (r.status !== "Repaired") return null;
+  if (!r.qc?.test || r.qc.test.result === "Fail") return "Testing";
+  if (!r.qc.verify || r.qc.verify.result === "Rejected") return "Verification";
+  return "Ready for Return";
+}
+
+/** Items that came in with the entry (for the return checklist). */
+export function receivedItems(r: RepairEntry): string[] {
+  if (r.pcb) { const t = accessoriesText(r.pcb); return t.startsWith("With ") ? t.slice(5).split(", ") : []; }
+  if (r.coil) return Object.keys(r.coil.accessories ?? {}).filter((k) => r.coil!.accessories![k]);
+  return [];
 }

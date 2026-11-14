@@ -100,3 +100,30 @@ describe("Technician repair update", () => {
     expect(after.staffTasks!.find((t) => t.key === `repair:${r.id}:2026-11-15`)!.status).toBe("Done");
   });
 });
+
+describe("After repair: testing → independent verification → shop return", () => {
+  it("runs the flow, sends failures back to repair and blocks a self-verification", async () => {
+    const { addRepair, saveRepairWork, saveRepairTest, verifyRepair, returnRepair } = await import("@/app/lib/store");
+    const { emptyWork, TEST_CHECKS, VERIFY_CHECKS, qcStage, EMPTY_PCB } = await import("@/app/lib/repair");
+    const { emptyDraft } = await import("@/app/components/repair");
+    const r = addRepair({ ...emptyDraft("Shop", "Shop Staff"), customerName: "Neha", customerPhone: "9811111111", techName: "Amit", brand: "LG", issue: "dead", pcb: { ...EMPTY_PCB, accessories: { Sensor: true, Remote: true } } }, "Shop");
+    if (!("id" in r)) throw new Error(r.error);
+    const get = () => db().repairs!.find((x) => x.id === r.id)!;
+    expect(saveRepairTest(r.id, { by: "Amit", date: "2026-11-14", checks: [], minutes: 30, result: "Pass", remarks: "" }, "Amit")).toMatch(/after the item is marked Repaired/);
+    expect(saveRepairWork(r.id, "Repaired", { ...emptyWork(), techId: "t1", techName: "Rohit Kumar", diagnosis: "IC", action: "Replaced IC" }, "Rohit")).toBeNull();
+    expect(qcStage(get())).toBe("Testing");
+    // failed test → back to repair
+    expect(saveRepairTest(r.id, { by: "Amit Sharma", date: "2026-11-14", checks: [], minutes: 20, result: "Fail", remarks: "Relay not switching" }, "Amit")).toBeNull();
+    expect(get().status).toBe("Repair Work in Progress");
+    expect(saveRepairWork(r.id, "Repaired", { ...emptyWork(), techId: "t1", techName: "Rohit Kumar", diagnosis: "IC + relay", action: "Replaced relay" }, "Rohit")).toBeNull();
+    expect(saveRepairTest(r.id, { by: "Amit Sharma", date: "2026-11-14", checks: [...TEST_CHECKS["PCB Board"]], minutes: 30, result: "Pass", remarks: "" }, "Amit")).toBeNull();
+    expect(qcStage(get())).toBe("Verification");
+    expect(verifyRepair(r.id, { by: "Rohit Kumar", date: "2026-11-14", checks: [...VERIFY_CHECKS], result: "Approved", remarks: "" }, "Rohit")).toMatch(/someone other/);
+    expect(verifyRepair(r.id, { by: "Suresh Patel", date: "2026-11-14", checks: [...VERIFY_CHECKS], result: "Approved", remarks: "" }, "Suresh")).toBeNull();
+    expect(qcStage(get())).toBe("Ready for Return");
+    const out = { to: "Customer (walk-in)" as const, receivedBy: "Neha", receivedPhone: "9811111111", handedBy: "Shop Staff", date: "2026-11-15", accessories: ["Sensor"], charge: 1200, payMode: "UPI" as const, remarks: "" };
+    expect(returnRepair(r.id, out, "Shop")).toMatch(/Not returned: Remote/);
+    expect(returnRepair(r.id, { ...out, accessories: ["Sensor", "Remote"] }, "Shop")).toBeNull();
+    expect(get()).toMatchObject({ status: "Returned", returnDate: "2026-11-15", charge: 1200 });
+  });
+});

@@ -17,7 +17,7 @@ import {
 import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
-import { STATUS_LABEL, internalCost, isHold, validateRepair, validateWork, type RepairDraft, type RepairEntry, type RepairStatus, type RepairWork } from "./repair";
+import { STATUS_LABEL, TEST_CHECKS, VERIFY_CHECKS, internalCost, isHold, qcStage, receivedItems, validateRepair, validateWork, type RepairQc, type RepairDraft, type RepairEntry, type RepairStatus, type RepairWork } from "./repair";
 import { DOC_LABEL, aadhaarLast4, daysToBirthday, emptyProfile, profileProblems, type DocKey, type DocStatus, type PaymentInfo, type TechProfile } from "./techprofile";
 import { DEFAULT_FIELD_RULES, distanceM, newVisitOtp, parseGps, type FieldRules } from "./field";
 import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
@@ -963,6 +963,83 @@ export function saveRepairWork(id: string, status: RepairStatus, w: RepairWork, 
       notify(d, `customer:${r.customerId}`, `Your ${r.itemType} is repaired`, `${r.id} · ${r.brand}`);
     if (changed) notify(d, "admin", `Repair ${id} · ${STATUS_LABEL[status]}`, `${r.itemType} · ${r.brand} · ${r.customerName} — by ${work.techName}${work.hold ? ` · ${work.hold.reason}` : ""}`);
     audit(d, by, "Technician repair update", `${id} → ${STATUS_LABEL[status]} · cost ${inr(internalCost(work))}`);
+  });
+  return null;
+}
+
+const qcEntry = (id: string) => (getSnapshot().repairs ?? []).find((x) => x.id === id);
+
+/** Step 1 — bench testing. A failed test sends the item back to repair. */
+export function saveRepairTest(id: string, t: Omit<NonNullable<RepairQc["test"]>, "at">, by: string): Err {
+  const r = qcEntry(id);
+  if (!r) return "Repair entry not found.";
+  if (qcStage(r) !== "Testing") return "Testing is done after the item is marked Repaired.";
+  if (!t.by.trim()) return "Enter who tested the item.";
+  if (t.result === "Pass" && t.checks.length < TEST_CHECKS[r.itemType].length) return "Tick every test before passing it — or mark it Fail.";
+  if (t.result === "Fail" && !t.remarks.trim()) return "Write what failed in the test.";
+  mutate((d) => {
+    const x = d.repairs!.find((y) => y.id === id)!;
+    x.qc = { ...(x.qc ?? {}), test: { ...t, by: t.by.trim(), remarks: t.remarks.trim(), at: nowIso() }, verify: undefined };
+    if (t.result === "Fail") {
+      x.status = "Repair Work in Progress";
+      x.timeline.push({ at: nowIso(), status: x.status, by, note: `Testing failed — back to repair: ${t.remarks.trim()}` });
+      notify(d, "admin", `Repair ${id} failed testing`, `${x.itemType} · ${x.brand} — ${t.remarks.trim()}`);
+    } else x.timeline.push({ at: nowIso(), status: x.status, by, note: `Testing passed (${t.by.trim()})` });
+    audit(d, by, "Repair tested", `${id} · ${t.result}`);
+  });
+  return null;
+}
+
+/** Step 2 — independent verification by someone other than the repair technician and the tester. */
+export function verifyRepair(id: string, v: Omit<NonNullable<RepairQc["verify"]>, "at">, by: string): Err {
+  const r = qcEntry(id);
+  if (!r) return "Repair entry not found.";
+  if (qcStage(r) !== "Verification") return "Verification comes after a passed test.";
+  const who = v.by.trim().toLowerCase();
+  if (!who) return "Enter who verified the item.";
+  if (who === (r.work?.techName ?? "").trim().toLowerCase() || who === (r.qc?.test?.by ?? "").trim().toLowerCase()) return "Independent verification must be done by someone other than the repair technician and the tester.";
+  if (v.result === "Approved" && v.checks.length < VERIFY_CHECKS.length) return "Tick every verification point before approving — or reject it.";
+  if (v.result === "Rejected" && !v.remarks.trim()) return "Write why it was rejected.";
+  mutate((d) => {
+    const x = d.repairs!.find((y) => y.id === id)!;
+    x.qc = { ...(x.qc ?? {}), verify: { ...v, by: v.by.trim(), remarks: v.remarks.trim(), at: nowIso() } };
+    if (v.result === "Rejected") {
+      x.status = "Repair Work in Progress";
+      x.qc.test = undefined;
+      x.timeline.push({ at: nowIso(), status: x.status, by, note: `Verification rejected — back to repair: ${v.remarks.trim()}` });
+      notify(d, "admin", `Repair ${id} rejected at verification`, `${x.itemType} · ${x.brand} — ${v.remarks.trim()}`);
+    } else {
+      x.timeline.push({ at: nowIso(), status: x.status, by, note: `Verified by ${v.by.trim()} — ready for return` });
+      if (x.customerId) notify(d, `customer:${x.customerId}`, `Your ${x.itemType} is ready`, `${x.id} · ${x.brand} — tested and verified, ready to collect / fit.`);
+    }
+    audit(d, by, "Repair verified", `${id} · ${v.result}`);
+  });
+  return null;
+}
+
+/** Step 3 — physical handover from the shop; closes the entry. */
+export function returnRepair(id: string, o: Omit<NonNullable<RepairQc["outward"]>, "at">, by: string): Err {
+  const r = qcEntry(id);
+  if (!r) return "Repair entry not found.";
+  if (qcStage(r) !== "Ready for Return") return "The item can be returned only after testing and verification.";
+  if (!o.receivedBy.trim()) return "Enter who received the item.";
+  if (o.receivedPhone && !/^\d{10}$/.test(o.receivedPhone)) return "Mobile must be 10 digits.";
+  if (!o.handedBy.trim()) return "Enter who handed it over from the shop.";
+  if (!o.date) return "Pick the return date.";
+  const missing = receivedItems(r).filter((k) => !o.accessories.includes(k));
+  if (missing.length && !o.remarks.trim()) return `Not returned: ${missing.join(", ")} — write a remark.`;
+  if (o.charge != null && o.charge < 0) return "Charge cannot be negative.";
+  mutate((d) => {
+    const x = d.repairs!.find((y) => y.id === id)!;
+    const now = nowIso();
+    x.qc = { ...(x.qc ?? {}), outward: { ...o, receivedBy: o.receivedBy.trim(), handedBy: o.handedBy.trim(), remarks: o.remarks.trim(), at: now } };
+    x.status = "Returned";
+    x.returnDate = o.date;
+    if (o.charge != null) x.charge = o.charge;
+    x.timeline.push({ at: now, status: "Returned", by, note: `Handed to ${o.receivedBy.trim()} (${o.to})${o.charge != null ? ` · ${inr(o.charge)} ${o.payMode}` : ""}` });
+    (d.staffTasks ?? []).forEach((t) => { if (t.key.startsWith(`repair:${id}:`) && t.status === "Open") Object.assign(t, { status: "Done", doneAt: now, doneBy: by, note: "Item returned" }); });
+    if (x.customerId) notify(d, `customer:${x.customerId}`, `Your ${x.itemType} has been returned`, `${x.id} · ${x.brand}${o.charge != null ? ` · ${inr(o.charge)}` : ""}`);
+    audit(d, by, "Repair returned", `${id} → ${o.receivedBy.trim()} · ${o.to}`);
   });
   return null;
 }

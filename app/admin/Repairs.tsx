@@ -1,30 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { RepairDetails, RepairForm, RepairStatusForm, RepairUpdateForm, STATUS_TONE, emptyDraft, repairWhatsApp } from "../components/repair";
+import { RepairDetails, RepairForm, RepairQcFlow, RepairStatusForm, RepairUpdateForm, STATUS_TONE, emptyDraft, repairWhatsApp } from "../components/repair";
 import { fmtDate, inr, isoDay, type Db } from "../lib/data";
-import { MODE_LABEL, REPAIR_STATUSES, daysHeld, isDelayed, repairItemLabel, type RepairEntry, type RepairStatus } from "../lib/repair";
+import { MODE_LABEL, REPAIR_STATUSES, daysHeld, qcStage, isDelayed, repairItemLabel, type RepairEntry, type RepairStatus } from "../lib/repair";
 import { addRepair, saveRepairWork, setRepairStatus, updateRepair } from "../lib/store";
 import { Badge, Btn, Filter, Modal, Panel, SearchBox, Stat, Table, muted } from "./kit";
 
 /* Admin / shop-staff side of the repair register: receive items, send to vendors, update status, see delays. */
 
-type F = "All" | "In Shop" | "Outsourced" | "Delayed" | RepairStatus;
-const FILTERS: F[] = ["All", "In Shop", "Outsourced", "Delayed", ...REPAIR_STATUSES];
+type F = "All" | "In Shop" | "Outsourced" | "Delayed" | "Testing & Return" | RepairStatus;
+const FILTERS: F[] = ["All", "In Shop", "Outsourced", "Delayed", "Testing & Return", ...REPAIR_STATUSES];
 
 export function RepairsSection({ db, who, notify }: { db: Db; who: string; notify: (m: string) => void }) {
   const [f, setF] = useState<F>("In Shop");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [mode, setMode] = useState<"view" | "status" | "edit" | "update" | null>(null);
+  const [mode, setMode] = useState<"view" | "status" | "edit" | "update" | "qc" | null>(null);
   const [pick, setPick] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const all = db.repairs ?? [];
   const t = isoDay(0);
-  const done = (r: RepairEntry) => r.status === "Repaired" || r.status === "Returned";
-  const rows = all.filter((r) => f === "All" ? true : f === "In Shop" ? !done(r) : f === "Outsourced" ? r.mode === "Out Source" && !done(r) : f === "Delayed" ? isDelayed(r, t) : r.status === f)
+  const done = (r: RepairEntry) => r.status === "Returned";
+  const rows = all.filter((r) => f === "All" ? true : f === "In Shop" ? !done(r) : f === "Outsourced" ? r.mode === "Out Source" && !done(r) : f === "Delayed" ? isDelayed(r, t) : f === "Testing & Return" ? ["Testing", "Verification", "Ready for Return"].includes(qcStage(r) ?? "") : r.status === f)
     .filter((r) => !q.trim() || `${r.id} ${r.customerName} ${r.customerPhone} ${r.brand} ${r.itemType} ${r.techName} ${r.vendor?.name ?? ""}`.toLowerCase().includes(q.toLowerCase()));
-  const counts = Object.fromEntries(FILTERS.map((x) => [x, all.filter((r) => x === "All" ? true : x === "In Shop" ? !done(r) : x === "Outsourced" ? r.mode === "Out Source" && !done(r) : x === "Delayed" ? isDelayed(r, t) : r.status === x).length])) as Partial<Record<F, number>>;
+  const counts = Object.fromEntries(FILTERS.map((x) => [x, all.filter((r) => x === "All" ? true : x === "In Shop" ? !done(r) : x === "Outsourced" ? r.mode === "Out Source" && !done(r) : x === "Delayed" ? isDelayed(r, t) : x === "Testing & Return" ? ["Testing", "Verification", "Ready for Return"].includes(qcStage(r) ?? "") : r.status === x).length])) as Partial<Record<F, number>>;
   const entry = open ? all.find((r) => r.id === open) : undefined;
   const techNames = db.techs.filter((x) => x.active).map((x) => x.name);
   const vendorDue = all.filter((r) => r.mode === "Out Source" && !done(r) && r.vendor && r.vendor.expectedDate < t);
@@ -32,10 +32,10 @@ export function RepairsSection({ db, who, notify }: { db: Db; who: string; notif
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="admin-grid-4">
-        <Stat label="In the shop" value={String(counts["In Shop"] ?? 0)} sub="not yet repaired / returned" tone="blue" />
+        <Stat label="In the shop" value={String(counts["In Shop"] ?? 0)} sub="not yet returned to the customer" tone="blue" />
         <Stat label="At outside vendors" value={String(counts["Outsourced"] ?? 0)} sub={`${vendorDue.length} past the expected date`} tone={vendorDue.length ? "amber" : "teal"} />
         <Stat label="Delayed (> 7 days)" value={String(counts.Delayed ?? 0)} sub="need a delay reason & customer update" tone={counts.Delayed ? "red" : "green"} />
-        <Stat label="Repaired this month" value={String(all.filter((r) => done(r) && r.timeline.some((e) => (e.status === "Repaired") && e.at.slice(0, 7) === t.slice(0, 7))).length)} sub={inr(all.filter(done).reduce((s, r) => s + (r.charge ?? 0), 0)) + " charged (all time)"} tone="green" />
+        <Stat label="Repaired this month" value={String(all.filter((r) => r.timeline.some((e) => (e.status === "Repaired") && e.at.slice(0, 7) === t.slice(0, 7))).length)} sub={inr(all.filter(done).reduce((s, r) => s + (r.charge ?? 0), 0)) + " charged (all time)"} tone="green" />
       </div>
 
       <Panel title="PCB Board · Stabilizer · Indoor Coil repair register" actions={<><SearchBox value={q} onChange={setQ} placeholder="Search name, mobile, brand, vendor…" /><Btn kind="ghost" onClick={() => { setOpen(null); setPick(null); setMode("update"); }}>🔧 Technician Repair Update</Btn><Btn onClick={() => setAdding(true)}>＋ New Inward Entry</Btn></>} pad={false}>
@@ -48,7 +48,7 @@ export function RepairsSection({ db, who, notify }: { db: Db; who: string; notif
           { key: "status", head: "Status", render: (r) => <div><Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>{r.pendingReason && <div style={{ ...muted, maxWidth: 220 }}>{r.pendingReason}</div>}</div> },
           { key: "return", head: "Return", render: (r) => r.returnDate ? fmtDate(r.returnDate) : "—" },
           { key: "₹", head: "₹", render: (r) => r.charge == null ? "—" : inr(r.charge) },
-          { key: "actions", head: "", render: (r) => <div style={{ display: "flex", gap: 6 }}><Btn small kind="ghost" onClick={() => { setOpen(r.id); setMode("view"); }}>View</Btn><Btn small onClick={() => { setOpen(null); setPick(r.id); setMode("update"); }}>Repair update</Btn><Btn small kind="ghost" onClick={() => { setOpen(r.id); setMode("status"); }}>Status</Btn></div> },
+          { key: "actions", head: "", render: (r) => <div style={{ display: "flex", gap: 6 }}><Btn small kind="ghost" onClick={() => { setOpen(r.id); setMode("view"); }}>View</Btn>{qcStage(r) && qcStage(r) !== "Returned" ? <Btn small onClick={() => { setOpen(r.id); setMode("qc"); }}>{qcStage(r) === "Ready for Return" ? "Return" : qcStage(r)}</Btn> : r.status !== "Returned" && <Btn small onClick={() => { setOpen(null); setPick(r.id); setMode("update"); }}>Repair update</Btn>}<Btn small kind="ghost" onClick={() => { setOpen(r.id); setMode("status"); }}>Status</Btn></div> },
         ]} />
       </Panel>
 
@@ -67,6 +67,11 @@ export function RepairsSection({ db, who, notify }: { db: Db; who: string; notif
       {entry && mode === "status" && (
         <Modal title={`Update status · ${entry.id}`} onClose={() => setMode(null)}>
           <RepairStatusForm r={entry} onSave={(s, info) => { const e = setRepairStatus(entry.id, s, info, who); if (e) return e; setMode(null); notify(`${entry.id} → ${s}`); return null; }} />
+        </Modal>
+      )}
+      {entry && mode === "qc" && (
+        <Modal title={`${entry.id} · Testing → Verification → Return`} onClose={() => setMode(null)} width={600}>
+          <RepairQcFlow key={entry.id + entry.status + (qcStage(entry) ?? "")} db={db} r={entry} who={who} onDone={(m) => notify(`${entry.id}: ${m}`)} />
         </Modal>
       )}
       {mode === "update" && (

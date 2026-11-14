@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Chips, Pill, PrimaryButton, Toggle, card, field, label, small, type Tone } from "./ui";
 import { fmtDate, fmtDateTime, inr, isoDay, type Db } from "../lib/data";
+import { returnRepair, saveRepairTest, verifyRepair } from "../lib/store";
 import {
   AC_CAPACITIES, AC_TECH, AC_TYPE_OPTIONS, APPLIANCES, EMPTY_COIL, EMPTY_PCB, EMPTY_STAB, FRIDGE_TYPES, OVEN_TYPES, PCB_ITEMS, PCB_TYPES, WASHER_KG, WASHER_TYPES, REPAIR_ITEM_TYPES, REPAIR_MODES, REPAIR_STATUSES, MODE_LABEL, STAB_BOOST, STAB_KVA, STAB_TYPES,
-  COIL_ACCESSORIES, COIL_ITEMS, GAS_TYPES, HOLD_REASONS, NEXT_STEPS, STATUS_LABEL, TECH_STATUSES, accessoriesText, emptyWork, internalCost, isHold, partsCost, pcbApplianceLine, daysHeld, isDelayed, repairItemLabel, validateRepair,
+  COIL_ACCESSORIES, COIL_ITEMS, PAY_MODES, RETURN_TO, TEST_CHECKS, VERIFY_CHECKS, qcStage, receivedItems, GAS_TYPES, HOLD_REASONS, NEXT_STEPS, STATUS_LABEL, TECH_STATUSES, accessoriesText, emptyWork, internalCost, isHold, partsCost, pcbApplianceLine, daysHeld, isDelayed, repairItemLabel, validateRepair,
   type RepairDraft, type RepairEntry, type RepairWork, type RepairItemType, type RepairMode, type RepairStatus,
 } from "../lib/repair";
 
@@ -297,6 +298,9 @@ export function RepairDetails({ r }: { r: RepairEntry }) {
         {row("Internal cost", `${inr(internalCost(r.work))}${r.work.hours != null ? ` · ${r.work.hours} h` : ""}`)}
       </>}
       {r.delayReason && row("Delay / late reason", r.delayReason)}
+      {r.qc?.test && row("Testing", `${r.qc.test.result} · ${r.qc.test.by} · ${fmtDate(r.qc.test.date)}`)}
+      {r.qc?.verify && row("Verification", `${r.qc.verify.result} · ${r.qc.verify.by} · ${fmtDate(r.qc.verify.date)}`)}
+      {r.qc?.outward && row("Returned to", `${r.qc.outward.receivedBy} (${r.qc.outward.to}) · by ${r.qc.outward.handedBy}`)}
       <p style={{ ...label, margin: "14px 0 4px", fontSize: 12.5 }}>Timeline</p>
       {r.timeline.map((e, i) => <p key={i} style={{ ...small, margin: "0 0 4px" }}><b>{STATUS_LABEL[e.status] ?? e.status}</b> · {fmtDateTime(e.at)} · {e.by}{e.note ? ` — ${e.note}` : ""}</p>)}
     </div>
@@ -316,7 +320,8 @@ export function RepairStatusForm({ r, onSave }: { r: RepairEntry; onSave: (statu
   return (
     <div>
       <span style={label}>Repair status</span>
-      <Chips options={REPAIR_STATUSES} value={status} onChange={setStatus} labelOf={(x) => STATUS_LABEL[x]} />
+      <Chips options={REPAIR_STATUSES.filter((x) => x !== "Returned" || r.status === "Returned")} value={status} onChange={setStatus} labelOf={(x) => STATUS_LABEL[x]} />
+      <p style={{ ...small, marginTop: 6 }}>Return to the customer is done after testing & verification — use <b>Testing → Verification → Return</b>.</p>
       <div style={{ height: 12 }} />
       {status === "Pending" && <Txt l="On hold reason" value={pendingReason} onChange={setPendingReason} placeholder="Why is the repair pending?" required multiline />}
       {(late || status === "Pending" || delayReason) && <Txt l="Delay / late reason" value={delayReason} onChange={setDelayReason} placeholder="Why is it late?" multiline />}
@@ -441,9 +446,86 @@ export function RepairUpdateForm({ db, repairId, onPick, defaultTechId, onSave }
           </div>
           {err && <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
           <div style={{ marginTop: 12 }}><PrimaryButton onClick={() => { const e = onSave(r.id, st.status, w); setErr(e); setSaved(!e); }}>{saved ? "✓ Saved" : "Save technician repair update"}</PrimaryButton></div>
-          <p style={{ ...small, textAlign: "center", marginTop: 6 }}>After “Repaired”, the next steps are testing → verification → return to the customer (Update status → Returned).</p>
+          <p style={{ ...small, textAlign: "center", marginTop: 6 }}>After “Repaired”, the entry moves to Testing → Independent Verification → Shop Return.</p>
         </div>
       </>}
+    </div>
+  );
+}
+
+/** After "Repaired": 1. Testing → 2. Independent verification → 3. Physical shop return. */
+export function RepairQcFlow({ db, r, who, onDone }: { db: Db; r: RepairEntry; who: string; onDone: (msg: string) => void }) {
+  const stage = qcStage(r);
+  const people = [...db.techs.filter((t) => t.active).map((t) => t.name), "Shop Staff"];
+  const steps = ["Testing", "Verification", "Ready for Return"] as const;
+  const at = stage ? steps.indexOf(stage as (typeof steps)[number]) : -1;
+  const [err, setErr] = useState<string | null>(null);
+  const tChecks = TEST_CHECKS[r.itemType];
+  const [t, setT] = useState({ by: who === "Admin" ? "" : who, date: isoDay(0), checks: [] as string[], minutes: null as number | null, result: "Pass" as "Pass" | "Fail", remarks: "" });
+  const [v, setV] = useState({ by: "", date: isoDay(0), checks: [] as string[], result: "Approved" as "Approved" | "Rejected", remarks: "" });
+  const items = receivedItems(r);
+  const [o, setO] = useState({ to: RETURN_TO[0] as (typeof RETURN_TO)[number], receivedBy: r.customerName, receivedPhone: r.customerPhone, handedBy: who === "Admin" ? "" : who, date: isoDay(0), accessories: [...items], charge: r.charge as number | null, payMode: "Cash" as (typeof PAY_MODES)[number], remarks: "" });
+  const tick = (list: string[], k: string, on: boolean) => (on ? [...list, k] : list.filter((x) => x !== k));
+  const checkList = (opts: readonly string[], value: string[], onChange: (v: string[]) => void) => opts.map((k) => (
+    <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, padding: "5px 0", cursor: "pointer" }}><input type="checkbox" checked={value.includes(k)} onChange={(e) => onChange(tick(value, k, e.target.checked))} style={{ width: 17, height: 17, accentColor: "#111" }} /> {k}</label>
+  ));
+  const who$ = (l: string, value: string, onChange: (x: string) => void, id: string) => (
+    <div style={{ marginBottom: 10 }}><span style={label}>{l} <span style={{ color: "var(--red)" }}>*</span></span><input list={id} value={value} onChange={(e) => { onChange(e.target.value); setErr(null); }} style={field} /><datalist id={id}>{people.map((n) => <option key={n} value={n} />)}</datalist></div>
+  );
+  const run = (e: string | null, msg: string) => { setErr(e); if (!e) onDone(msg); };
+  if (!stage) return <p style={small}>This step opens when the item is marked <b>Repaired</b> in the Technician Repair Update.</p>;
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
+        {["1. Testing", "2. Verification", "3. Shop Return"].map((l, i) => {
+          const done = stage === "Returned" || i < at, on = i === at;
+          return <div key={l} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 10, fontSize: 12.5, fontWeight: 800, background: on ? "#111" : done ? "var(--success-bg, #dcfce7)" : "var(--bg-secondary)", color: on ? "#fff" : done ? "var(--success-text)" : "var(--ink-soft)" }}>{done ? "✓ " : ""}{l}</div>;
+        })}
+      </div>
+      {r.qc?.test && stage !== "Testing" && <p style={{ ...small, margin: "0 0 4px" }}>✓ Tested by <b>{r.qc.test.by}</b> on {fmtDate(r.qc.test.date)}{r.qc.test.minutes ? ` · ${r.qc.test.minutes} min` : ""}</p>}
+      {r.qc?.verify && (stage === "Ready for Return" || stage === "Returned") && <p style={{ ...small, margin: "0 0 4px" }}>✓ Verified by <b>{r.qc.verify.by}</b> on {fmtDate(r.qc.verify.date)}</p>}
+      {stage === "Testing" && <>
+        {r.qc?.test?.result === "Fail" && <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "var(--error-text)" }}>Last test failed: {r.qc.test.remarks}</p>}
+        {who$("Tested by", t.by, (x) => setT({ ...t, by: x }), "qc-testers")}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Txt l="Test date" type="date" value={t.date} onChange={(x) => setT({ ...t, date: x })} />
+          <Txt l="Test duration (minutes)" type="number" value={t.minutes == null ? "" : String(t.minutes)} onChange={(x) => setT({ ...t, minutes: x === "" ? null : Number(x) })} />
+        </div>
+        <span style={label}>Tests done</span>{checkList(tChecks, t.checks, (c) => { setT({ ...t, checks: c }); setErr(null); })}
+        <Radio l="Test result" value={t.result} onChange={(x) => setT({ ...t, result: x })} options={["Pass", "Fail"] as const} />
+        <Txt l={t.result === "Fail" ? "What failed (goes back to repair)" : "Test remarks"} value={t.remarks} onChange={(x) => setT({ ...t, remarks: x })} required={t.result === "Fail"} multiline />
+        {err && <p role="alert" style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
+        <PrimaryButton onClick={() => run(saveRepairTest(r.id, t, who), t.result === "Pass" ? "Test passed — now independent verification" : "Test failed — sent back to repair")}>Save test result</PrimaryButton>
+      </>}
+      {stage === "Verification" && <>
+        <p style={{ ...small, margin: "0 0 8px" }}>Must be done by someone <b>other than</b> the repair technician ({r.work?.techName ?? "—"}) and the tester ({r.qc?.test?.by}).</p>
+        {who$("Verified by", v.by, (x) => setV({ ...v, by: x }), "qc-verifiers")}
+        <Txt l="Verification date" type="date" value={v.date} onChange={(x) => setV({ ...v, date: x })} />
+        <span style={label}>Verification points</span>{checkList(VERIFY_CHECKS, v.checks, (c) => { setV({ ...v, checks: c }); setErr(null); })}
+        <Radio l="Verification result" value={v.result} onChange={(x) => setV({ ...v, result: x })} options={["Approved", "Rejected"] as const} />
+        <Txt l={v.result === "Rejected" ? "Why rejected (goes back to repair)" : "Remarks"} value={v.remarks} onChange={(x) => setV({ ...v, remarks: x })} required={v.result === "Rejected"} multiline />
+        {err && <p role="alert" style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
+        <PrimaryButton onClick={() => run(verifyRepair(r.id, v, who), v.result === "Approved" ? "Verified — ready for return" : "Rejected — sent back to repair")}>Save verification</PrimaryButton>
+      </>}
+      {stage === "Ready for Return" && <>
+        <Radio l="Returned to" value={o.to} onChange={(x) => setO({ ...o, to: x })} options={RETURN_TO} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Txt l="Received by (name)" value={o.receivedBy} onChange={(x) => setO({ ...o, receivedBy: x })} required />
+          <Txt l="Receiver mobile" type="tel" value={o.receivedPhone} onChange={(x) => setO({ ...o, receivedPhone: x.replace(/\D/g, "").slice(0, 10) })} />
+        </div>
+        {who$("Handed over by (shop)", o.handedBy, (x) => setO({ ...o, handedBy: x }), "qc-handers")}
+        <Txt l="Return date" type="date" value={o.date} onChange={(x) => setO({ ...o, date: x })} required />
+        {items.length > 0 && <><span style={label}>Accessories returned</span>{checkList(items, o.accessories, (c) => { setO({ ...o, accessories: c }); setErr(null); })}</>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Txt l="Customer charge (₹)" type="number" value={o.charge == null ? "" : String(o.charge)} onChange={(x) => setO({ ...o, charge: x === "" ? null : Number(x) })} />
+          <div style={{ marginBottom: 10 }}><span style={label}>Payment</span><select aria-label="Payment mode" value={o.payMode} onChange={(e) => setO({ ...o, payMode: e.target.value as (typeof PAY_MODES)[number] })} style={field}>{PAY_MODES.map((m) => <option key={m}>{m}</option>)}</select></div>
+        </div>
+        {r.work && <p style={{ ...small, marginTop: -4 }}>Internal repair cost: {inr(internalCost(r.work))}{o.charge != null ? ` · margin ${inr(o.charge - internalCost(r.work))}` : ""}</p>}
+        <Txt l="Remarks" value={o.remarks} onChange={(x) => setO({ ...o, remarks: x })} placeholder="Anything not returned, customer instructions…" multiline />
+        {err && <p role="alert" style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "var(--error-text)" }}>{err}</p>}
+        <PrimaryButton onClick={() => run(returnRepair(r.id, o, who), "Item returned — entry closed")}>Confirm return & close</PrimaryButton>
+      </>}
+      {stage === "Returned" && r.qc?.outward && <p style={{ ...small }}>✓ Returned to <b>{r.qc.outward.receivedBy}</b> ({r.qc.outward.to}) on {fmtDate(r.qc.outward.date)} by {r.qc.outward.handedBy}{r.qc.outward.charge != null ? ` · ${inr(r.qc.outward.charge)} ${r.qc.outward.payMode}` : ""}.</p>}
     </div>
   );
 }
