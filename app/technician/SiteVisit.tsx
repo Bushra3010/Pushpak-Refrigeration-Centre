@@ -101,7 +101,7 @@ function VisitForm({ db, tech, v, onBack, flash }: { db: Db; tech: Technician; v
         {box("5. Drain Pump Requirement", <>{yn("drainPump", "Drain pump required?")}{d.drainPump === "Yes" && <><p style={{ ...label, margin: "6px 0 2px" }}>Reason</p>{multi("pumpReasons", PUMP_REASONS)}{d.pumpReasons.includes("Other") && <input value={d.pumpOther} onChange={(e) => set({ pumpOther: e.target.value })} placeholder="Other reason" style={field} />}</>}</>)}
         {box("6. Core Cutting Details", <>{yn("coreCut", "Core cutting required?")}{d.coreCut === "Yes" && <>{num("holes", "Number of holes")}{num("diaMm", "Approx core cutting size (DIA mm)", "63")}{tick("coreMarked", "Core cutting location marked")}</>}</>)}
         {box("7. Copper Pipe Measurement & Route", <>{tick("pipeMeasured", "Copper pipe actual measurement taken")}{num("pipeFt", "Length (ft)")}{pick("pipeRoute", "Pipe route", PIPE_ROUTES)}
-          <p style={{ ...small, margin: "4px 0 0" }}>Piping type: <b>{d.pipeType || "select in section 3"}</b></p></>)}
+          {tick("pipingConfirmed", `Piping type confirmed — ${d.pipeType || "select in section 3"}`)}</>)}
         {box("8. Marking & Permission (VERY IMPORTANT)", <>{d.coreCut === "Yes" ? yn("coreMarking", "Core cutting marking done?") : <p style={small}>Core cutting not required.</p>}{d.chasing === "Yes" ? yn("chasingMarking", "Wall chasing (झिरी) marking done?") : <p style={small}>Wall chasing not required.</p>}</>)}
         {box("9. Special Notes (VERY IMPORTANT)", <>
           <label style={{ display: "block", margin: "8px 0" }}><span style={label}>AC capacity (Ton)</span><select value={d.capacity} onChange={(e) => { const c = e.target.value as SiteVisitDraft["capacity"]; set({ capacity: c, standardFt: STANDARD_PIPE_FT[c] }); }} style={field}>{SV_CAPACITIES.map((c) => <option key={c} value={c}>{c} Ton</option>)}</select></label>
@@ -112,6 +112,7 @@ function VisitForm({ db, tech, v, onBack, flash }: { db: Db; tech: Technician; v
           </div>
           {extra > 0 && <><p style={{ ...label, margin: "8px 0 2px" }}>Reason *</p>{multi("extraReasons", EXTRA_PIPE_REASONS)}</>}
           {tick("allVisible", "All markings clearly visible")}
+          {tick("photosTaken", "Marking photos clicked")}
           <p style={{ ...label, margin: "8px 0 6px" }}>Marking photos</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {d.photos.map((p, i) => (
@@ -123,7 +124,8 @@ function VisitForm({ db, tech, v, onBack, flash }: { db: Db; tech: Technician; v
             ))}
             <label style={{ width: 72, height: 72, borderRadius: 10, border: "1.5px dashed var(--line-strong)", display: "grid", placeItems: "center", fontSize: 24, cursor: "pointer" }}>📷<input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) set({ photos: [...d.photos, await shrinkPhoto(f, 900)] }); e.target.value = ""; }} /></label>
           </div>
-          <label style={{ display: "block", margin: "10px 0" }}><span style={label}>Special site challenges</span><textarea rows={2} value={d.challenges} onChange={(e) => set({ challenges: e.target.value })} style={{ ...field, resize: "none" }} /></label>
+          {tick("challengesNoted", "Special site challenges noted")}
+          <label style={{ display: "block", margin: "10px 0" }}><span style={label}>Special site challenges (write “None” if none)</span><textarea rows={2} value={d.challenges} onChange={(e) => set({ challenges: e.target.value })} style={{ ...field, resize: "none" }} /></label>
           <p style={{ ...small, margin: 0 }}>📝 Technician: <b>{tech.name}</b> · 📅 {fmtDate(d.visitDate)}</p>
           <label style={{ display: "block", margin: "8px 0" }}><span style={label}>✍ Report submitted to</span><input value={d.submittedTo} onChange={(e) => set({ submittedTo: e.target.value })} style={field} /></label>
         </>)}

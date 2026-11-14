@@ -69,13 +69,34 @@ describe("AC site visit", () => {
       coreCut: "Yes", holes: 1, diaMm: 63, coreMarked: true, pipeMeasured: true, pipeFt: 25, pipeRoute: "Through False Ceiling", coreMarking: "Yes", chasingMarking: "Yes",
     });
     expect(extraPipeFt(v)).toBe(15);
-    expect(visitProblems(v)).toEqual(["9. Reason for extra copper pipe", "9. Marking photos", "9. All markings clearly visible"]);
-    Object.assign(v, { extraReasons: ["False Ceiling"], photos: ["data:image/png;base64,x"], allVisible: true });
+    expect(visitProblems(v)).toEqual(["7. Piping type confirmed", "9. Reason for extra copper pipe", "9. Marking photos clicked", "9. Special site challenges noted", "9. All markings clearly visible"]);
+    Object.assign(v, { pipingConfirmed: true, extraReasons: ["False Ceiling"], photos: ["data:image/png;base64,x"], photosTaken: true, allVisible: true, challengesNoted: true });
     expect(visitProblems(v)).toEqual([]);
     const { id } = saveSiteVisit(null, "t1", v);
     expect(submitSiteVisit(id, v)).toEqual([]);
     expect(reviewSiteVisit(id, false, "", "Admin")).toMatch(/correct/);
     expect(reviewSiteVisit(id, true, "Order 25 ft pipe + drain pump", "Admin")).toBeNull();
     expect(db().siteVisits!.find((x) => x.id === id)!.status).toBe("Reviewed");
+  });
+});
+
+describe("Technician repair update", () => {
+  it("auto-fills from the inward entry, needs hold reason + next step, makes a follow-up task and adds up cost", async () => {
+    const { addRepair, saveRepairWork } = await import("@/app/lib/store");
+    const { emptyWork, internalCost } = await import("@/app/lib/repair");
+    const { emptyDraft } = await import("@/app/components/repair");
+    const r = addRepair({ ...emptyDraft("Shop", "Shop Staff"), customerName: "Rajesh Kumar", customerPhone: "9840000001", techName: "Suresh", brand: "Daikin", model: "FTKM50", issue: "AC not starting" }, "Shop");
+    if (!("id" in r)) throw new Error(r.error);
+    expect(r.id).toMatch(/^PRC-REP-\d{4}$/);
+    const w = { ...emptyWork(), techId: "t1", techName: "Rohit Kumar", diagnosis: "SMPS IC damaged" };
+    expect(saveRepairWork(r.id, "Pending", w, "Rohit")).toMatch(/reason/);
+    const held = { ...w, hold: { reason: "Part Not Available", nextStep: "Second-Hand PCB", supplier: "Lajpat market", expectedDate: "2026-11-16", followUp: "2026-11-15" }, parts: [{ name: "IC", qty: 2, unitCost: 150 }], labour: 250, other: 50, hours: 2.5 };
+    expect(saveRepairWork(r.id, "Pending", held, "Rohit")).toBeNull();
+    expect(internalCost(held)).toBe(600);
+    expect(db().staffTasks!.some((t) => t.key === `repair:${r.id}:2026-11-15` && t.status === "Open")).toBe(true);
+    expect(saveRepairWork(r.id, "Repaired", { ...held, action: "Replaced IC" }, "Rohit")).toBeNull();
+    const after = db();
+    expect(after.repairs!.find((x) => x.id === r.id)!.status).toBe("Repaired");
+    expect(after.staffTasks!.find((t) => t.key === `repair:${r.id}:2026-11-15`)!.status).toBe("Done");
   });
 });

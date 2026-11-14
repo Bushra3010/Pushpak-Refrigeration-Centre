@@ -108,7 +108,7 @@ export const rentDueDate = (room: RentRoom, month: string) => `${month}-${String
 export interface StaffTask {
   id: string;
   key: string; // dedupe: "rent:<roomId>:<YYYY-MM>" | "lpg:<cylinderId>"
-  kind: "Room Rent" | "LPG Refill" | "Warranty Expiry";
+  kind: "Room Rent" | "LPG Refill" | "Warranty Expiry" | "Repair Follow-up";
   title: string;
   detail: string;
   due: string;

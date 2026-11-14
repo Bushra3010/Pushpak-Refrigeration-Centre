@@ -193,7 +193,7 @@ function TaskTable({ rows, onDo }: { rows: StaffTask[]; onDo: (t: StaffTask) => 
   const t0 = isoDay(0);
   return (
     <Table<StaffTask> rowKey={(t) => t.id} rows={rows} empty="No tasks here." cols={[
-      { key: "k", head: "Task", render: (t) => <div><Badge tone={t.kind === "Room Rent" ? "purple" : t.kind === "Warranty Expiry" ? "amber" : "red"}>{t.kind === "Room Rent" ? "🏠 Room Rent" : t.kind === "Warranty Expiry" ? "🧾 Warranty" : "🔥 LPG"}</Badge><div style={{ fontWeight: 700, marginTop: 4 }}>{t.title}</div><div style={muted}>{t.detail}</div></div> },
+      { key: "k", head: "Task", render: (t) => <div><Badge tone={t.kind === "Room Rent" ? "purple" : t.kind === "Warranty Expiry" ? "amber" : t.kind === "Repair Follow-up" ? "blue" : "red"}>{t.kind === "Room Rent" ? "🏠 Room Rent" : t.kind === "Warranty Expiry" ? "🧾 Warranty" : t.kind === "Repair Follow-up" ? "🔌 Repair follow-up" : "🔥 LPG"}</Badge><div style={{ fontWeight: 700, marginTop: 4 }}>{t.title}</div><div style={muted}>{t.detail}</div></div> },
       { key: "due", head: "Due", render: (t) => <span style={{ fontWeight: 600, color: t.status === "Open" && t.due < t0 ? "var(--error-text)" : undefined }}>{fmtDate(t.due)}{t.status === "Open" && t.due < t0 ? " · overdue" : t.due === t0 ? " · today" : ""}</span> },
       { key: "to", head: "Assigned to", render: (t) => t.assignTo },
       { key: "s", head: "Status", render: (t) => t.status === "Done" ? <div><Badge tone="green">Done</Badge><div style={muted}>{t.doneBy} · {t.note}</div></div> : <Badge tone="amber">Open</Badge> },

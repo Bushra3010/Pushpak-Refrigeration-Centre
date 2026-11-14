@@ -3,28 +3,114 @@
  * from either side: the technician who brings the item (technician app) or the shop staff who
  * receives it (admin panel). */
 
-export const REPAIR_ITEM_TYPES = ["PCB Board", "Stabilizer", "Indoor Coil"] as const;
+export const REPAIR_ITEM_TYPES = ["PCB Board", "Stabilizer", "Indoor Coil", "Other"] as const;
 export type RepairItemType = (typeof REPAIR_ITEM_TYPES)[number];
 
 export const REPAIR_MODES = ["In-house", "Out Source"] as const;
 export type RepairMode = (typeof REPAIR_MODES)[number];
 /** What the shop sends out: PCBs and split-AC indoor coils. */
-export const OUTSOURCE_ITEMS: RepairItemType[] = ["PCB Board", "Indoor Coil"];
+export const OUTSOURCE_ITEMS: RepairItemType[] = ["PCB Board", "Indoor Coil", "Other"];
 
-export const REPAIR_STATUSES = ["Received", "Repair Work in Progress", "Pending", "Repaired", "Returned"] as const;
+export const REPAIR_STATUSES = ["Received", "Under Diagnosis", "Repair Work in Progress", "Pending", "Repaired", "Repair Not Possible", "Returned"] as const;
 export type RepairStatus = (typeof REPAIR_STATUSES)[number];
+/** Screen names for the stored status values. */
+export const STATUS_LABEL: Record<RepairStatus, string> = {
+  Received: "Received", "Under Diagnosis": "Under Diagnosis", "Repair Work in Progress": "Repair In Progress", Pending: "On Hold",
+  Repaired: "Repaired", "Repair Not Possible": "Repair Not Possible", Returned: "Returned",
+};
+/** What the repairing technician can set (Technician Repair Update). */
+export const TECH_STATUSES: RepairStatus[] = ["Under Diagnosis", "Repair Work in Progress", "Repaired", "Pending", "Repair Not Possible"];
+export const isHold = (s: RepairStatus) => s === "Pending" || s === "Repair Not Possible";
+export const HOLD_REASONS = ["Fault Not Identified", "Part Not Available", "Board Damaged Beyond Repair", "Waiting for Vendor", "Customer Approval Pending", "Other"] as const;
+export const NEXT_STEPS = ["Order Spare Part", "Send to Outside Repair Centre", "Second-Hand PCB", "New PCB", "Return Unrepaired to Customer", "Other"] as const;
 
-export const AC_CAPACITIES = ["1 Ton", "1.5 Ton", "2 Ton"] as const;
-export const AC_TECH = ["Inverter", "Non-Inverter"] as const;
+export interface RepairPart { name: string; qty: number; unitCost: number }
+/** Technician Repair Update — filled by the technician who repairs the item. */
+export interface RepairWork {
+  techId: string;
+  techName: string;
+  diagnosis: string;
+  action: string;
+  hold: { reason: string; nextStep: string; supplier: string; expectedDate: string; followUp: string } | null;
+  parts: RepairPart[];
+  hours: number | null;
+  labour: number;
+  other: number;
+  updatedAt: string;
+  by: string;
+}
+export const partsCost = (w: Pick<RepairWork, "parts">) => w.parts.reduce((s, p) => s + p.qty * p.unitCost, 0);
+export const internalCost = (w: Pick<RepairWork, "parts" | "labour" | "other">) => partsCost(w) + (w.labour || 0) + (w.other || 0);
+export const emptyWork = (): RepairWork => ({ techId: "", techName: "", diagnosis: "", action: "", hold: null, parts: [], hours: null, labour: 0, other: 0, updatedAt: "", by: "" });
+
+export function validateWork(status: RepairStatus, w: RepairWork): string | null {
+  if (!w.techName.trim()) return "Choose the technician doing the repair.";
+  if (!TECH_STATUSES.includes(status)) return "Choose the repair status.";
+  if (status !== "Under Diagnosis" && !w.diagnosis.trim()) return "Write the problem found / fault diagnosis.";
+  if (status === "Repaired" && !w.action.trim()) return "Write the repair work done.";
+  if (isHold(status)) {
+    if (!w.hold?.reason) return "Choose the reason the repair failed / is on hold.";
+    if (!w.hold.nextStep) return "Choose the next step.";
+  }
+  if (w.parts.some((p) => !p.name.trim() || !(p.qty > 0) || !(p.unitCost >= 0))) return "Each spare part needs a name, quantity and cost.";
+  if ([w.labour, w.other].some((n) => !(n >= 0)) || (w.hours != null && !(w.hours >= 0))) return "Time and costs cannot be negative.";
+  return null;
+}
+
+export const AC_CAPACITIES = ["1 Ton", "1.5 Ton", "2 Ton", "Other"] as const;
+export const AC_TECH = ["Inverter", "Non-Inverter", "Not Sure"] as const;
+export const APPLIANCES = ["AC", "Refrigerator", "Washing Machine", "Oven", "Other"] as const;
+export const AC_TYPE_OPTIONS = ["Split AC", "Window AC", "Cassette AC", "Tower AC", "Ductable AC"] as const;
 export const PCB_TYPES = ["Indoor PCB", "Outdoor PCB", "Indoor & Outdoor"] as const;
-export const STAB_KVA = ["4 KVA", "5 KVA"] as const;
+export const STAB_KVA = ["0.5 KVA", "1 KVA", "2 KVA", "4 KVA", "5 KVA"] as const;
+export const STAB_TYPES = ["Mainline", "AC Stabilizer", "Refrigerator Stabilizer", "TV Stabilizer", "Servo Stabilizer", "Other"] as const;
+/** Shown on screen for the stored repair-method values. */
+export const MODE_LABEL: Record<RepairMode, string> = { "In-house": "In-House", "Out Source": "Outsourced" };
 export const STAB_BOOST = ["Single Boost", "Double Boost"] as const;
-export const PCB_ACCESSORIES = { sensor: "Sensor", remote: "Remote", case: "Case", indoorMotor: "Indoor Motor", outdoorMotor: "Outdoor Motor" } as const;
-export type PcbAccessory = keyof typeof PCB_ACCESSORIES;
+/** Older entries stored AC accessories under these keys. */
+const LEGACY_ACCESSORY: Record<string, string> = { sensor: "Sensor", remote: "Remote", case: "Case", indoorMotor: "Indoor Motor", outdoorMotor: "Outdoor Motor" };
+export type Appliance = (typeof APPLIANCES)[number];
+/** "Items received along with PCB board" — changes with the appliance. */
+export const PCB_ITEMS: Record<Appliance, readonly string[]> = {
+  AC: ["Sensor", "Remote", "Case", "Indoor Motor", "Outdoor Motor", "Transformer"],
+  Refrigerator: ["Sensor", "Display Board", "Relay / OLP", "Transformer", "Case"],
+  "Washing Machine": ["Display / Control Panel", "Water Level Sensor", "Door Lock", "Transformer", "Case"],
+  Oven: ["Keypad / Touch Panel", "Transformer", "Case"],
+  Other: [],
+};
+export const FRIDGE_TYPES = ["Single Door", "Double Door", "Side-by-Side", "French Door", "Other"] as const;
+export const WASHER_TYPES = ["Top Load", "Front Load", "Semi-Automatic"] as const;
+export const WASHER_KG = ["6 KG", "6.5 KG", "7 KG", "7.5 KG", "8 KG", "9 KG", "10 KG +"] as const;
+export const OVEN_TYPES = ["Solo", "Grill", "Convection", "OTG", "Other"] as const;
 
-export interface PcbDetails { acType: string; capacity: (typeof AC_CAPACITIES)[number]; tech: (typeof AC_TECH)[number]; pcbType: (typeof PCB_TYPES)[number]; accessories: Record<PcbAccessory, boolean> }
-export interface StabilizerDetails { kva: (typeof STAB_KVA)[number]; boost: (typeof STAB_BOOST)[number] }
-export interface CoilDetails { acType: string; capacity: (typeof AC_CAPACITIES)[number]; tech: (typeof AC_TECH)[number] }
+export interface PcbDetails {
+  /** appliance the PCB is from (older entries: AC) */
+  appliance?: Appliance;
+  /** AC fields */
+  acType: string; capacity: (typeof AC_CAPACITIES)[number]; pcbType: (typeof PCB_TYPES)[number];
+  tech: (typeof AC_TECH)[number];
+  /** Refrigerator / Washing Machine / Oven type */
+  kind?: string;
+  /** Refrigerator & Oven capacity in litres */
+  litres?: string;
+  /** Washing machine */
+  model?: string; kg?: string;
+  /** Appliance = Other */
+  applianceName?: string; otherItems?: string;
+  /** items received along with the PCB, by name (older entries: legacy keys) */
+  accessories: Record<string, boolean>;
+}
+export interface StabilizerDetails { /** older entries: AC Stabilizer */ type?: (typeof STAB_TYPES)[number]; otherType?: string; kva: (typeof STAB_KVA)[number]; boost: (typeof STAB_BOOST)[number] }
+export const COIL_ITEMS = ["Only Indoor Coil", "Complete Indoor Unit", "Coil With Casing"] as const;
+export const GAS_TYPES = ["R22", "R32", "R410A", "R134a", "R407C", "R290", "Other", "Unknown"] as const;
+export const COIL_ACCESSORIES = ["Blower", "Fan Motor", "Drain Tray", "Casing", "Sensors"] as const;
+export interface CoilDetails {
+  /** older entries: Only Indoor Coil */
+  item?: (typeof COIL_ITEMS)[number];
+  acType: string; capacity: (typeof AC_CAPACITIES)[number]; tech: (typeof AC_TECH)[number];
+  gas?: (typeof GAS_TYPES)[number];
+  accessories?: Record<string, boolean>;
+}
 
 export interface RepairEvent { at: string; status: RepairStatus; by: string; note?: string }
 
@@ -40,7 +126,11 @@ export interface RepairEntry {
   customerId?: string | null;
   techName: string;          // who brought the item in
   itemType: RepairItemType;
+  /** name of the item when itemType is "Other" */
+  otherItem?: string;
   brand: string;
+  /** model number of the appliance (optional) */
+  model?: string;
   issue: string;
   pcb?: PcbDetails;
   stabilizer?: StabilizerDetails;
@@ -54,20 +144,25 @@ export interface RepairEntry {
   delayReason: string;
   charge: number | null;     // amount charged to the customer, if known
   timeline: RepairEvent[];
+  /** Technician Repair Update */
+  work?: RepairWork;
 }
 
-export const EMPTY_PCB: PcbDetails = { acType: "Split AC", capacity: "1.5 Ton", tech: "Inverter", pcbType: "Indoor PCB", accessories: { sensor: false, remote: false, case: false, indoorMotor: false, outdoorMotor: false } };
-export const EMPTY_STAB: StabilizerDetails = { kva: "4 KVA", boost: "Single Boost" };
-export const EMPTY_COIL: CoilDetails = { acType: "Split AC", capacity: "1.5 Ton", tech: "Non-Inverter" };
+export const EMPTY_PCB: PcbDetails = { appliance: "AC", acType: "Split AC", capacity: "1.5 Ton", tech: "Inverter", pcbType: "Indoor PCB", accessories: {} };
+export const EMPTY_STAB: StabilizerDetails = { type: "Mainline", kva: "4 KVA", boost: "Single Boost" };
+export const EMPTY_COIL: CoilDetails = { item: "Only Indoor Coil", acType: "Split AC", capacity: "1.5 Ton", tech: "Inverter", gas: "R32", accessories: {} };
 
-export type RepairDraft = Omit<RepairEntry, "id" | "createdAt" | "timeline" | "status" | "pendingReason" | "delayReason">;
+export type RepairDraft = Omit<RepairEntry, "id" | "createdAt" | "timeline" | "status" | "pendingReason" | "delayReason" | "work">;
 
 export function validateRepair(d: RepairDraft): string | null {
   if (!d.customerName.trim()) return "Enter the customer name.";
   if (!/^\d{10}$/.test(d.customerPhone.replace(/\D/g, ""))) return "Enter a 10-digit mobile number.";
   if (!d.techName.trim()) return "Enter who brought the item.";
+  if (d.itemType === "Stabilizer" && d.stabilizer?.type === "Other" && !d.stabilizer.otherType?.trim()) return "Enter the stabilizer type.";
+  if (d.itemType === "Other" && !d.otherItem?.trim()) return "Enter the name of the item received.";
+  if (d.itemType === "PCB Board" && d.pcb?.appliance === "Other" && !d.pcb.applianceName?.trim()) return "Enter the appliance name.";
   if (!d.brand.trim()) return "Enter the brand name.";
-  if (!d.issue.trim()) return "Describe the problem / issue.";
+  if (!d.issue.trim()) return "Describe the reported problem.";
   if (!d.receivedDate) return "Enter the receive date.";
   if (d.mode === "Out Source" && !d.vendor?.name.trim()) return "Enter the outside vendor's name.";
   return null;
@@ -75,22 +170,33 @@ export function validateRepair(d: RepairDraft): string | null {
 
 /** One-line description for lists and WhatsApp messages. */
 export function repairItemLabel(r: RepairEntry): string {
-  if (r.itemType === "PCB Board" && r.pcb) return `${r.brand} ${r.pcb.capacity} ${r.pcb.tech} · ${r.pcb.pcbType}`;
-  if (r.itemType === "Stabilizer" && r.stabilizer) return `${r.brand} ${r.stabilizer.kva} · ${r.stabilizer.boost}`;
-  if (r.itemType === "Indoor Coil" && r.coil) return `${r.brand} ${r.coil.capacity} ${r.coil.tech} indoor coil`;
+  if (r.itemType === "PCB Board" && r.pcb) return (r.pcb.appliance ?? "AC") === "AC" ? `${r.brand} ${r.pcb.capacity} ${r.pcb.tech} · ${r.pcb.pcbType}` : `${r.brand} ${r.pcb.appliance === "Other" ? r.pcb.applianceName : r.pcb.appliance} PCB${r.pcb.kind ? ` · ${r.pcb.kind}` : ""}`;
+  if (r.itemType === "Other") return `${r.brand} ${r.otherItem ?? ""}`.trim();
+  if (r.itemType === "Stabilizer" && r.stabilizer) return `${r.brand} ${r.stabilizer.type === "Other" ? r.stabilizer.otherType || "Stabilizer" : r.stabilizer.type ?? "AC Stabilizer"} ${r.stabilizer.kva} · ${r.stabilizer.boost}`;
+  if (r.itemType === "Indoor Coil" && r.coil) return `${r.brand} ${r.coil.capacity} ${r.coil.tech} · ${r.coil.item ?? "Only Indoor Coil"}${r.coil.gas ? ` · ${r.coil.gas}` : ""}`;
   return r.brand;
 }
 
 export function accessoriesText(p: PcbDetails): string {
-  const yes = (Object.keys(PCB_ACCESSORIES) as PcbAccessory[]).filter((k) => p.accessories[k]).map((k) => PCB_ACCESSORIES[k]);
-  return yes.length ? `With ${yes.join(", ")}` : "No accessories";
+  const yes = [...Object.keys(p.accessories).filter((k) => p.accessories[k]).map((k) => LEGACY_ACCESSORY[k] ?? k), ...(p.otherItems?.trim() ? [p.otherItems.trim()] : [])];
+  return yes.length ? `With ${yes.join(", ")}` : "No items with the PCB";
+}
+
+/** "Refrigerator · Double Door · 260 L · Inverter" — the appliance line for any PCB entry. */
+export function pcbApplianceLine(p: PcbDetails): string {
+  const a = p.appliance ?? "AC";
+  if (a === "AC") return `${p.acType} · ${p.capacity} · ${p.pcbType} · ${p.tech}`;
+  if (a === "Refrigerator") return ["Refrigerator", p.kind, p.litres && `${p.litres} L`, p.tech].filter(Boolean).join(" · ");
+  if (a === "Washing Machine") return ["Washing Machine", p.kind, p.kg, p.model, p.tech].filter(Boolean).join(" · ");
+  if (a === "Oven") return ["Oven", p.kind, p.litres && `${p.litres} L`, p.tech].filter(Boolean).join(" · ");
+  return [p.applianceName || "Other appliance", p.tech].filter(Boolean).join(" · ");
 }
 
 /** Days an item has been with the shop (or with the vendor), from the receive date. */
 export const daysHeld = (r: RepairEntry, today: string) => Math.max(0, Math.round((Date.parse(today) - Date.parse(r.receivedDate)) / 86400000));
 
 /** Open for more than 7 days and not yet repaired/returned. */
-export const isDelayed = (r: RepairEntry, today: string) => !["Repaired", "Returned"].includes(r.status) && daysHeld(r, today) > 7;
+export const isDelayed = (r: RepairEntry, today: string) => !["Repaired", "Returned", "Repair Not Possible"].includes(r.status) && daysHeld(r, today) > 7;
 
 export function seedRepairs(today: (offset: number) => string, now: string): RepairEntry[] {
   const ev = (status: RepairStatus, by: string, daysAgo: number, note?: string): RepairEvent => ({ at: `${today(-daysAgo)}T10:30:00`, status, by, note });

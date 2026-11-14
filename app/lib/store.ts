@@ -17,7 +17,7 @@ import {
 import { buildPayrollRun } from "./finance";
 import type { Advance, AttendanceMark, Deduction, Expense, FinanceSettings, Holiday, Incentive, SalaryRecord, SavedCalc, TimeLog } from "./finance-types";
 import { cleanDb, upgradeDb, withFinanceSeed } from "./finance-seed";
-import { validateRepair, type RepairDraft, type RepairEntry, type RepairStatus } from "./repair";
+import { STATUS_LABEL, internalCost, isHold, validateRepair, validateWork, type RepairDraft, type RepairEntry, type RepairStatus, type RepairWork } from "./repair";
 import { DOC_LABEL, aadhaarLast4, daysToBirthday, emptyProfile, profileProblems, type DocKey, type DocStatus, type PaymentInfo, type TechProfile } from "./techprofile";
 import { DEFAULT_FIELD_RULES, distanceM, newVisitOtp, parseGps, type FieldRules } from "./field";
 import { addDays, latestSupplier, validateSample, type CustomerTemplate, type SampleDraft, type SampleEnquiry, type SupplierResponse } from "./samples";
@@ -890,7 +890,7 @@ export function addRepair(draft: RepairDraft, by: string): { id: string } | { er
     d.repairs ??= [];
     const phone = draft.customerPhone.replace(/\D/g, "");
     const cust = d.customers.find((c) => c.phone === phone && !c.mergedInto);
-    id = `R-${d.repairs.reduce((m, r) => Math.max(m, Number(r.id.slice(2)) || 100), 100) + 1}`;
+    id = `PRC-REP-${String(d.repairs.filter((r) => r.id.startsWith("PRC-REP-")).reduce((m, r) => Math.max(m, Number(r.id.slice(8)) || 0), 0) + 1).padStart(4, "0")}`;
     const now = nowIso();
     const entry: RepairEntry = { ...draft, customerPhone: phone, customerId: draft.customerId ?? cust?.id ?? null, id, createdAt: now, status: "Received", pendingReason: "", delayReason: "", timeline: [{ at: now, status: "Received", by }] };
     d.repairs.unshift(entry);
@@ -933,6 +933,38 @@ export function setRepairStatus(id: string, status: RepairStatus, info: { note?:
     audit(d, by, "Repair status", `${id} → ${status}${info.note ? ` · ${info.note}` : ""}`);
   });
   return err;
+}
+
+/** Technician Repair Update: diagnosis, status, hold reason & next step, parts, time and internal cost. */
+export function saveRepairWork(id: string, status: RepairStatus, w: RepairWork, by: string): Err {
+  const r0 = (getSnapshot().repairs ?? []).find((x) => x.id === id);
+  if (!r0) return "Repair entry not found.";
+  const err = validateWork(status, w);
+  if (err) return err;
+  mutate((d) => {
+    const r = d.repairs!.find((x) => x.id === id)!;
+    const now = nowIso();
+    const work: RepairWork = { ...structuredClone(w), diagnosis: w.diagnosis.trim(), action: w.action.trim(), hold: isHold(status) ? structuredClone(w.hold) : null, parts: w.parts.map((p) => ({ ...p, name: p.name.trim() })), updatedAt: now, by };
+    r.work = work;
+    const changed = r.status !== status;
+    r.status = status;
+    if (work.hold) r.pendingReason = `${work.hold.reason} → ${work.hold.nextStep}${work.hold.supplier ? ` (${work.hold.supplier})` : ""}`;
+    else if (status === "Repaired") r.pendingReason = "";
+    r.timeline.push({ at: now, status, by, note: [changed ? "" : "Update", work.diagnosis && `Found: ${work.diagnosis}`, work.action && `Done: ${work.action}`, work.hold && `${work.hold.reason} → ${work.hold.nextStep}`].filter(Boolean).join(" · ") || undefined });
+    d.staffTasks ??= [];
+    // Follow-up date → a task for the office; finished repairs close their follow-ups.
+    if (work.hold?.followUp) {
+      const key = `repair:${id}:${work.hold.followUp}`;
+      if (!d.staffTasks.some((t) => t.key === key))
+        d.staffTasks.unshift({ id: `task${++d.seq}`, key, kind: "Repair Follow-up", title: `Follow up repair ${id} — ${r.customerName}`, detail: `${r.itemType} · ${r.brand} · ${work.hold.reason} → ${work.hold.nextStep}${work.hold.expectedDate ? ` · expected ${fmtDate(work.hold.expectedDate)}` : ""}`, due: work.hold.followUp, assignTo: "Service Coordinator", status: "Open", createdAt: now });
+    }
+    if (!isHold(status)) d.staffTasks.forEach((t) => { if (t.key.startsWith(`repair:${id}:`) && t.status === "Open") Object.assign(t, { status: "Done", doneAt: now, doneBy: by, note: `Repair ${STATUS_LABEL[status]}` }); });
+    if (r.customerId && status === "Repaired" && changed)
+      notify(d, `customer:${r.customerId}`, `Your ${r.itemType} is repaired`, `${r.id} · ${r.brand}`);
+    if (changed) notify(d, "admin", `Repair ${id} · ${STATUS_LABEL[status]}`, `${r.itemType} · ${r.brand} · ${r.customerName} — by ${work.techName}${work.hold ? ` · ${work.hold.reason}` : ""}`);
+    audit(d, by, "Technician repair update", `${id} → ${STATUS_LABEL[status]} · cost ${inr(internalCost(work))}`);
+  });
+  return null;
 }
 
 /* ───────────────────────── Spare-parts promo banners + enquiries ───────────────────────── */

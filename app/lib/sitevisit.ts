@@ -51,6 +51,8 @@ export interface SiteVisit {
   pipeMeasured: boolean;
   pipeFt: number | null;
   pipeRoute: (typeof PIPE_ROUTES)[number] | "";
+  /** "Piping type confirmed" (doc §7) */
+  pipingConfirmed?: boolean;
   // 8. Marking & permission
   coreMarking: YN;
   chasingMarking: YN;
@@ -60,7 +62,11 @@ export interface SiteVisit {
   extraReasons: string[];
   allVisible: boolean;
   photos: string[];
+  /** "Marking photos click kiye" (doc §9) */
+  photosTaken?: boolean;
   challenges: string;
+  /** "Special site challenges noted" (doc §9) */
+  challengesNoted?: boolean;
   submittedTo: string;
   office: { notes: string; by: string; at: string } | null;
   createdAt: string;
@@ -75,9 +81,9 @@ export const emptyVisit = (today: string): SiteVisitDraft => ({
   pipeType: "", chasing: "", chasingFt: null, chasingRouteMarked: false,
   drainWork: "", drainClear: "", drainSlope: "", drainPump: "", pumpReasons: [], pumpOther: "",
   coreCut: "", holes: null, diaMm: null, coreMarked: false,
-  pipeMeasured: false, pipeFt: null, pipeRoute: "",
+  pipeMeasured: false, pipeFt: null, pipeRoute: "", pipingConfirmed: false,
   coreMarking: "", chasingMarking: "",
-  capacity: "1.5", standardFt: STANDARD_PIPE_FT["1.5"], extraReasons: [], allVisible: false, photos: [], challenges: "", submittedTo: "Office",
+  capacity: "1.5", standardFt: STANDARD_PIPE_FT["1.5"], extraReasons: [], allVisible: false, photos: [], photosTaken: false, challenges: "", challengesNoted: false, submittedTo: "Office",
 });
 
 /** Pipe beyond the standard kit — worked out from the measured length and the AC's capacity. */
@@ -109,10 +115,12 @@ export function visitProblems(v: SiteVisitDraft): string[] {
   if (v.coreCut === "Yes" && !v.coreMarked) p.push("6. Core cutting location marked");
   if (!v.pipeMeasured || !(v.pipeFt && v.pipeFt > 0)) p.push("7. Copper pipe actual measurement (ft)");
   if (!v.pipeRoute) p.push("7. Pipe route");
+  if (!v.pipingConfirmed) p.push("7. Piping type confirmed");
   if (v.coreCut === "Yes" && !v.coreMarking) p.push("8. Core cutting marking done?");
   if (v.chasing === "Yes" && !v.chasingMarking) p.push("8. Wall chasing marking done?");
   if (extraPipeFt(v) > 0 && !v.extraReasons.length) p.push("9. Reason for extra copper pipe");
-  if ((v.coreMarking === "Yes" || v.chasingMarking === "Yes") && !v.photos.length) p.push("9. Marking photos");
+  if ((v.coreMarking === "Yes" || v.chasingMarking === "Yes") && (!v.photos.length || !v.photosTaken)) p.push("9. Marking photos clicked");
+  if (!v.challengesNoted) p.push("9. Special site challenges noted");
   if ((v.coreMarking === "Yes" || v.chasingMarking === "Yes") && !v.allVisible) p.push("9. All markings clearly visible");
   return p;
 }

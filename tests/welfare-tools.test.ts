@@ -83,3 +83,17 @@ describe("Welfare period summary", () => {
     expect(welfareSummary({ cylinders: [cyl("c1", "2026-03-01", "2026-04-01")] }, 12, "2026-11-11").cylinders).toBe(1);
   });
 });
+
+describe("Repair register — PCB by appliance & stabilizer types", () => {
+  it("labels each appliance and lists the right items", async () => {
+    const { PCB_ITEMS, pcbApplianceLine, accessoriesText, validateRepair, EMPTY_PCB } = await import("../app/lib/repair");
+    expect(PCB_ITEMS.AC).toContain("Transformer");
+    expect(PCB_ITEMS.AC).not.toContain("Wiring Harness");
+    expect(pcbApplianceLine({ ...EMPTY_PCB, appliance: "Refrigerator", kind: "Double Door", litres: "260" })).toBe("Refrigerator · Double Door · 260 L · Inverter");
+    expect(accessoriesText({ ...EMPTY_PCB, accessories: { sensor: true, Transformer: true } })).toBe("With Sensor, Transformer");
+    const base = { enteredBy: "x", enteredAs: "Shop Staff" as const, receivedDate: "2026-11-14", returnDate: null, customerName: "A", customerPhone: "9876543210", techName: "R", brand: "LG", issue: "dead", photos: [], mode: "In-house" as const, charge: null };
+    expect(validateRepair({ ...base, itemType: "PCB Board", pcb: { ...EMPTY_PCB, appliance: "Other" } })).toMatch(/appliance name/);
+    expect(validateRepair({ ...base, itemType: "Stabilizer", stabilizer: { type: "TV Stabilizer", kva: "0.5 KVA", boost: "Single Boost" } })).toBeNull();
+    expect(validateRepair({ ...base, itemType: "Other" })).toMatch(/item received/);
+  });
+});

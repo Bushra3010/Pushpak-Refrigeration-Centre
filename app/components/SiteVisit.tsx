@@ -26,9 +26,9 @@ export function SiteVisitSummary({ v }: { v: SiteVisit }) {
       {sec("4. Drain Line", [["Drain line work", v.drainWork], ["Route clear", v.drainWork === "Yes" ? v.drainClear : ""], ["Proper slope", v.drainWork === "Yes" ? v.drainSlope : ""]])}
       {sec("5. Drain Pump", [["Drain pump required", v.drainPump], ["Reason", v.drainPump === "Yes" ? [...v.pumpReasons.filter((r) => r !== "Other"), v.pumpOther].filter(Boolean).join(", ") : ""]])}
       {sec("6. Core Cutting", [["Core cutting required", v.coreCut], ["Holes", v.coreCut === "Yes" ? v.holes : null], ["Size (DIA mm)", v.coreCut === "Yes" ? v.diaMm : null], ["Location marked", v.coreCut === "Yes" ? v.coreMarked : ""]])}
-      {sec("7. Copper Pipe", [["Measurement taken", v.pipeMeasured], ["Length (ft)", v.pipeFt], ["Pipe route", v.pipeRoute]])}
+      {sec("7. Copper Pipe", [["Measurement taken", v.pipeMeasured], ["Length (ft)", v.pipeFt], ["Pipe route", v.pipeRoute], ["Piping type confirmed", v.pipingConfirmed]])}
       {sec("8. Marking & Permission", [["Core cutting marking", v.coreCut === "Yes" ? v.coreMarking : ""], ["Wall chasing marking", v.chasing === "Yes" ? v.chasingMarking : ""]])}
-      {sec("9. Special Notes", [["AC capacity", `${v.capacity} Ton`], ["Standard pipe length", `${v.standardFt} ft`], ["Actual required", v.pipeFt != null ? `${v.pipeFt} ft` : ""], ["Extra pipe", extra ? `⚠ ${extra} ft` : "None"], ["Reason", v.extraReasons.join(", ")], ["All markings visible", v.allVisible], ["Site challenges", v.challenges], ["Submitted to", v.submittedTo]])}
+      {sec("9. Special Notes", [["AC capacity", `${v.capacity} Ton`], ["Standard pipe length", `${v.standardFt} ft`], ["Actual required", v.pipeFt != null ? `${v.pipeFt} ft` : ""], ["Extra pipe", extra ? `⚠ ${extra} ft` : "None"], ["Reason", v.extraReasons.join(", ")], ["All markings visible", v.allVisible], ["Marking photos clicked", v.photosTaken], ["Site challenges noted", v.challengesNoted], ["Site challenges", v.challenges], ["Submitted to", v.submittedTo]])}
       {v.photos.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -159,8 +159,8 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
 }
 
 /** Wrapping row of selectable chips — single or multi select. */
-export function Chips<T extends string>({ options, value, onChange, multi }: {
-  options: readonly T[]; value: T | T[]; onChange: (v: T) => void; multi?: boolean;
+export function Chips<T extends string>({ options, value, onChange, multi, labelOf }: {
+  options: readonly T[]; value: T | T[]; onChange: (v: T) => void; multi?: boolean; labelOf?: (v: T) => string;
 }) {
   const sel = (o: T) => (multi ? (value as T[]).includes(o) : value === o);
   return (
@@ -172,7 +172,7 @@ export function Chips<T extends string>({ options, value, onChange, multi }: {
             border: on ? "1.5px solid #111" : "1.5px solid var(--line-strong)", borderRadius: 999, padding: "8px 13px",
             background: on ? "#111" : "var(--surface)", color: on ? "white" : "var(--text-secondary)",
             fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-          }}>{o}</button>
+          }}>{labelOf ? labelOf(o) : o}</button>
         );
       })}
     </div>
